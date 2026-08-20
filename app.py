@@ -46,6 +46,7 @@ MISTRAL_API_KEY = get_secret("MISTRAL_API_KEY")
 AGNES_API_KEY = get_secret("AGNES_API_KEY")
 MINIMAX_API_KEY = get_secret("MINIMAX_API_KEY")
 MUSICAPI_KEY = get_secret("MUSICAPI_KEY")
+HF_API_KEY = get_secret("HF_API_KEY")  # Hugging Face - free account, free monthly credits
 
 # ============================================================
 # CONFIG
@@ -185,6 +186,7 @@ DEFAULT_CHAT_MODEL = "groq-standard"
 IMAGE_MODELS = {
     "pollinations": {"label": "Pollinations AI", "icon": "🖼️", "desc": "Bilkul free"},
     "agnes": {"label": "Agnes AI", "icon": "🤖", "desc": "Free, high quality"},
+    "huggingface": {"label": "Hugging Face (Flux)", "icon": "🤗", "desc": "Free account credits"},
 }
 
 MUSIC_MODELS = {
@@ -1540,6 +1542,30 @@ def get_image_url_pollinations(prompt, ratio="9:16"):
     width, height = (768, 1365) if ratio == "9:16" else (1365, 768)
     return f"https://image.pollinations.ai/prompt/{quote(prompt)}?width={width}&height={height}&model=flux&enhance=true&nologo=true"
 
+def call_huggingface_image(prompt, ratio="9:16", api_key=None):
+    """Hugging Face free Inference API - needs a free HF account + free access token
+    (huggingface.co/settings/tokens). Free accounts get a monthly credit allowance,
+    no card required. Uses Flux.1-schnell (fast, good quality, open weights)."""
+    if api_key is None:
+        api_key = HF_API_KEY
+    if not api_key:
+        return None, "⚠️ HF_API_KEY set nahi hai. huggingface.co/settings/tokens se free token banao."
+    url = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    width, height = (768, 1360) if ratio == "9:16" else (1360, 768)
+    payload = {"inputs": prompt, "parameters": {"width": width, "height": height}}
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=120)
+        if resp.status_code == 503:
+            # Model is "cold" / loading on HF's shared infra - normal on free tier
+            return None, "⚠️ Model warm ho raha hai (free tier), 20-30 sec me phir try karo."
+        resp.raise_for_status()
+        # HF Inference API returns raw image bytes on success
+        b64 = base64.b64encode(resp.content).decode("ascii")
+        return f"data:image/png;base64,{b64}", None
+    except Exception as e:
+        return None, f"Error: {e}"
+
 # ============================================================
 # MODEL POPOVER
 # ============================================================
@@ -1782,6 +1808,17 @@ if st.session_state.active_tab == "image":
                 img_url, err = run_with_progress(
                     lambda: call_agnes_image(img_prompt, img_ratio, AGNES_API_KEY),
                     estimate_seconds=15, label="Image ban raha hai")
+                if err:
+                    st.error(err)
+                else:
+                    deduct_tokens(USER_EMAIL, IMAGE_TOKEN_COST)
+                    st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
+                    st.image(img_url, caption=img_prompt, use_container_width=True)
+                    st.session_state.gallery.insert(0, {"url": img_url, "prompt": img_prompt, "type": "image"})
+            elif img_model == "huggingface":
+                img_url, err = run_with_progress(
+                    lambda: call_huggingface_image(img_prompt, img_ratio, HF_API_KEY),
+                    estimate_seconds=20, label="Image ban raha hai")
                 if err:
                     st.error(err)
                 else:
