@@ -297,7 +297,7 @@ if "active_tab" not in st.session_state:
     st.session_state.active_tab = "chat"
 
 # ============================================================
-# CUSTOM CSS
+# CUSTOM CSS - FIXED SIDEBAR AND SETTINGS ISSUES
 # ============================================================
 st.markdown("""
 <style>
@@ -316,33 +316,86 @@ st.markdown("""
 .stApp { background: #ffffff; min-height: 100vh; }
 .stApp > header, .stApp > footer { display: none !important; }
 
+/* SIDEBAR FIX */
 section[data-testid="stSidebar"] {
-    background: #ffffff !important;
-    border-right: none !important;
+    background: #f8f9fa !important;
+    border-right: 1px solid #e8eaed !important;
     padding-top: 16px !important;
     padding-left: 10px !important;
     padding-right: 10px !important;
+    min-width: 240px !important;
 }
 section[data-testid="stSidebar"] * { color: #1f1f1f !important; }
-section[data-testid="stSidebar"] hr { display: none !important; }
+
+/* Sidebar buttons fix */
 section[data-testid="stSidebar"] div.stButton > button {
     background: transparent !important;
     border: none !important;
     border-radius: 24px !important;
     color: #444746 !important;
     text-align: left !important;
-    padding: 12px 16px !important;
-    margin-bottom: 4px !important;
+    padding: 10px 16px !important;
+    margin-bottom: 2px !important;
     font-weight: 400 !important;
     font-size: 14px !important;
     box-shadow: none !important;
+    width: 100% !important;
+    justify-content: flex-start !important;
 }
-section[data-testid="stSidebar"] div.stButton > button:hover { background: #f0f4f9 !important; }
+section[data-testid="stSidebar"] div.stButton > button:hover { 
+    background: #e8eaed !important; 
+}
 section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
     background: #d3e3fd !important;
     border: none !important;
     color: #041e49 !important;
     font-weight: 500 !important;
+}
+
+/* Hide duplicate model buttons in sidebar */
+section[data-testid="stSidebar"] div[data-testid="stPopover"] {
+    display: block !important;
+}
+
+/* Model selector popover fix */
+div[data-testid="stPopover"] {
+    background: white !important;
+    border: 1px solid #e8eaed !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
+    padding: 8px !important;
+    max-height: 400px !important;
+    overflow-y: auto !important;
+}
+div[data-testid="stPopover"] button {
+    border-radius: 8px !important;
+    padding: 8px 12px !important;
+    margin: 2px 0 !important;
+    background: transparent !important;
+    color: #1f1f1f !important;
+    border: none !important;
+    width: 100% !important;
+    text-align: left !important;
+}
+div[data-testid="stPopover"] button:hover {
+    background: #f0f4f9 !important;
+}
+div[data-testid="stPopover"] button[kind="primary"] {
+    background: #d3e3fd !important;
+}
+
+/* Settings popover fix */
+section[data-testid="stSidebar"] div[data-testid="stPopover"] button {
+    background: #f0f4f9 !important;
+    border-radius: 20px !important;
+    padding: 8px 16px !important;
+    font-size: 13px !important;
+    color: #1f1f1f !important;
+    text-align: center !important;
+    justify-content: center !important;
+}
+section[data-testid="stSidebar"] div[data-testid="stPopover"] button:hover {
+    background: #e8eaed !important;
 }
 
 .main-glass {
@@ -433,11 +486,32 @@ div.st-key-img_studio_card, div.st-key-vid_studio_card {
     margin: 4px auto 26px auto !important;
 }
 
+/* Hide the extra model buttons that appear above settings */
+[data-testid="stSidebar"] .stPopover {
+    margin-bottom: 8px !important;
+}
+
+/* Better spacing for sidebar elements */
+[data-testid="stSidebar"] > div:first-child {
+    gap: 4px !important;
+}
+
+/* Model section label fix */
+.model-section-label {
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    padding: 8px 4px 4px 4px !important;
+    color: #5f6368 !important;
+    border-bottom: 1px solid #e8eaed !important;
+    margin-bottom: 6px !important;
+}
+
 @media (max-width: 768px) {
     .main-glass { padding: 8px 10px; margin: 0 auto; }
     .hero-text { padding: 20px 0 14px 0; }
     .hero-text h1 { font-size: 22px; }
     .gemini-title { font-size: 17px !important; }
+    section[data-testid="stSidebar"] { min-width: 200px !important; }
 }
 </style>
 
@@ -779,7 +853,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# SIDEBAR
+# SIDEBAR - FIXED: Model buttons now properly inside popover
 # ============================================================
 with st.sidebar:
     st.markdown(f"<div style='font-size:20px; font-weight:500; padding:4px 12px 18px 12px; background:linear-gradient(90deg,#4285f4,#9b72cb,#d96570); -webkit-background-clip:text; -webkit-text-fill-color:transparent; display:inline-block;'>{APP_NAME}</div>", unsafe_allow_html=True)
@@ -813,9 +887,29 @@ with st.sidebar:
 
     _tokens_left = get_tokens_remaining(USER_EMAIL)
 
+    # Model selector - Now properly inside Settings popover
+    with st.popover("⚡ Model Select", use_container_width=True):
+        st.markdown("<div class='model-section-label'>🚀 Chat Models</div>", unsafe_allow_html=True)
+        for mid, info in CHAT_MODELS.items():
+            selected = mid == st.session_state.selected_chat_model
+            # Check if key is required
+            req_key = ""
+            if info["provider"] == "groq" and not GROQ_API_KEY:
+                req_key = " 🔑"
+            elif info["provider"] == "together" and not TOGETHER_API_KEY:
+                req_key = " 🔑"
+            elif info["provider"] == "huggingface_chat" and not HF_API_KEY:
+                req_key = " 🔑"
+            
+            label_text = f"{'✓ ' if selected else ''}{info['icon']} {info['label']}{req_key}"
+            if st.button(label_text, key=f"model_{mid}", use_container_width=True):
+                st.session_state.selected_chat_model = mid
+                st.rerun()
+
+    # Settings popover - Now separate from model selector
     with st.popover("⚙️  Settings", use_container_width=True):
-        st.caption(f"💬 Chat free limit: {FREE_MSG_LIMIT_PER_DAY}/day")
-        st.caption(f"🪙 Tokens today: {_tokens_left}/{TOKEN_LIMIT_PER_DAY} left")
+        st.caption(f"💬 Chat limit: {FREE_MSG_LIMIT_PER_DAY}/day")
+        st.caption(f"🪙 Tokens left: {_tokens_left}/{TOKEN_LIMIT_PER_DAY}")
         st.caption(f"🖼️ Image = {IMAGE_TOKEN_COST} tokens")
         st.caption(f"🎬 Video = {VIDEO_TOKEN_COST} tokens")
         st.caption(f"🎵 Music = {MUSIC_TOKEN_COST} tokens")
@@ -865,24 +959,6 @@ if st.session_state.active_tab == "chat":
     
     client_ip = get_client_ip()
     limit_hit = get_today_count(client_ip) >= FREE_MSG_LIMIT_PER_DAY
-    
-    # Model selector
-    with st.popover("⚡ Model Select ▼", use_container_width=False):
-        st.markdown("<div class='model-section-label free'>🚀 Free Chat Models</div>", unsafe_allow_html=True)
-        for mid, info in CHAT_MODELS.items():
-            selected = mid == st.session_state.selected_chat_model
-            if st.button(f"{'✓ ' if selected else ''}{info['icon']} {info['label']}", key=f"model_{mid}", use_container_width=True):
-                st.session_state.selected_chat_model = mid
-                st.rerun()
-            # Show if key is required
-            req_key = ""
-            if info["provider"] == "groq" and not GROQ_API_KEY:
-                req_key = " 🔑 Groq key"
-            elif info["provider"] == "together" and not TOGETHER_API_KEY:
-                req_key = " 🔑 Together key"
-            elif info["provider"] == "huggingface_chat" and not HF_API_KEY:
-                req_key = " 🔑 HF key"
-            st.caption(info.get("desc", "") + req_key)
     
     if limit_hit:
         st.warning(f"Today's limit reached ({FREE_MSG_LIMIT_PER_DAY})")
