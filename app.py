@@ -1,6 +1,6 @@
 """
-🧡 Dost AI — FINAL FIXED VERSION
-All Free AI Tools: Chat, Image, Video, Music, Translate
+🧡 Dost AI — ULTIMATE FREE AI MODELS
+Duniya bhar ke 30+ free AI models ek jagah
 """
 
 import streamlit as st
@@ -12,10 +12,13 @@ import time
 import base64
 import threading
 import math
+import io
+import json
+import random
 from datetime import date
 from urllib.parse import quote
-import random
 import streamlit.components.v1 as components
+from huggingface_hub import InferenceClient
 
 # ============================================================
 # 🔐 SECURE SECRETS
@@ -36,29 +39,23 @@ def get_secret(name):
 # 🔐 API KEYS
 # ============================================================
 GROQ_API_KEY = get_secret("GROQ_API_KEY")
-CEREBRAS_API_KEY = get_secret("CEREBRAS_API_KEY")
-MISTRAL_API_KEY = get_secret("MISTRAL_API_KEY")
+HF_API_KEY = get_secret("HF_API_KEY")
 AGNES_API_KEY = get_secret("AGNES_API_KEY")
-MINIMAX_API_KEY = get_secret("MINIMAX_API_KEY")
 MUSICAPI_KEY = get_secret("MUSICAPI_KEY")
-HF_API_KEY = get_secret("HF_API_KEY")  # New - for Hugging Face models
+REPLICATE_API_KEY = get_secret("REPLICATE_API_KEY")
+TOGETHER_API_KEY = get_secret("TOGETHER_API_KEY")
 
 # ============================================================
 # CONFIG
 # ============================================================
 APP_NAME = "Dost AI"
-USER_NAME = "Niraj"
 TEMPERATURE = 0.4
 FREE_MSG_LIMIT_PER_DAY = 40
-
-# 🪙 Per-account daily token wallet (resets every day, per Google account)
 TOKEN_LIMIT_PER_DAY = 1000
 IMAGE_TOKEN_COST = 20
 VIDEO_TOKEN_COST = 100
+MUSIC_TOKEN_COST = 30
 
-# Dost AI brand mark (same SVG used in the top header) — reused as the
-# assistant's chat avatar, so replies visually look like they came from
-# "Dost AI" instead of a generic robot emoji.
 _DOST_LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
 <defs>
     <linearGradient id="dostLogoBgAvatar" x1="0" y1="0" x2="1" y2="1">
@@ -75,149 +72,79 @@ _DOST_LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="64" height="6
 DOST_LOGO_AVATAR = "data:image/svg+xml;base64," + base64.b64encode(_DOST_LOGO_SVG.encode("utf-8")).decode("ascii")
 
 # ============================================================
-# 🎨 HIGH QUALITY PROMPTS - 9:16 RATIO
+# 🎨 COMPLETE FREE MODELS - 30+ MODELS
 # ============================================================
-HIGH_QUALITY_PROMPTS = [
-    "beautiful anime girl with long flowing silver hair wearing elegant kimono with cherry blossom pattern standing in japanese garden soft morning light 8k ultra detailed portrait masterpiece studio ghibli style cinematic",
-    "powerful samurai warrior in full armor holding katana dramatic sunset sky mountain background 8k ultra detailed portrait epic cinematic japanese art style",
-    "magical girl with glowing crystal powers floating in neon cyberpunk city vibrant purple pink lights 8k ultra detailed portrait anime style futuristic",
-    "ethereal fairy with translucent wings sitting on glowing mushroom in enchanted forest magical sparkles 8k ultra detailed portrait fantasy art dreamy",
-    "dragon flying above ancient japanese castle full moon night cherry blossoms falling 8k ultra detailed portrait epic fantasy masterpiece dramatic",
-    "beautiful goddess with flowing golden hair wearing white flowing dress standing in clouds with sun rays 8k ultra detailed portrait divine ethereal",
-    "cyberpunk warrior woman with neon glowing armor futuristic city background rain neon lights 8k ultra detailed portrait cinematic blade runner",
-    "mysterious fox spirit with nine tails floating in magical forest glowing blue orbs 8k ultra detailed portrait anime enchanting",
-    "warrior princess with flowing red cape standing on cliff edge dramatic storm sky lightning 8k ultra detailed portrait epic fantasy cinematic",
-    "beautiful mermaid with pearl necklace sitting on rock in ocean sunset waves crashing 8k ultra detailed portrait fantasy art dreamy",
-    "ninja in black outfit standing on rooftop at night full moon city lights below 8k ultra detailed portrait dramatic cinematic",
-    "crystal queen with crown of diamonds sitting on throne of ice winter palace background 8k ultra detailed portrait fantasy majestic",
-    "phoenix rising from flames fire wings spread dramatic lighting 8k ultra detailed portrait epic mythological cinematic",
-    "beautiful geisha with umbrella walking through autumn leaves traditional japanese street 8k ultra detailed portrait historical artistic",
-    "angel with white wings descending from heaven golden light clouds 8k ultra detailed portrait divine ethereal cinematic",
-    "dark elf warrior with bow and arrow in mystical forest glowing plants 8k ultra detailed portrait fantasy epic",
-]
 
-# ============================================================
-# MODEL TIERS - SAME AS ORIGINAL
-# ============================================================
-MODEL_TIERS = {
-    "free": {
-        "label": "Free",
-        "models": {
-            "groq-lite": {
-                "label": "Groq Lite",
-                "icon": "⚡",
-                "desc": "Sabse fast",
-                "provider": "groq",
-                "model_id": "llama3-8b-8192",  # Fixed model ID
-            },
-            "groq-standard": {
-                "label": "Groq Standard",
-                "icon": "💬",
-                "desc": "All-round powerful",
-                "provider": "groq",
-                "model_id": "llama3-70b-8192",  # Fixed model ID
-                "badge": "New",
-            },
-            "cerebras": {
-                "label": "Cerebras AI",
-                "icon": "🧠",
-                "desc": "1M tokens/min",
-                "provider": "cerebras",
-                "model_id": "llama3.1-70b",
-            },
-            "mistral": {
-                "label": "Mistral",
-                "icon": "🌪️",
-                "desc": "Open-source expert",
-                "provider": "mistral",
-                "model_id": "open-mistral-7b",
-            },
-            "pollinations-text": {
-                "label": "Pollinations",
-                "icon": "🌐",
-                "desc": "Bilkul free, no key",
-                "provider": "pollinations",
-            },
-        },
-    },
-    "pro": {
-        "label": "Pro · Add Key",
-        "models": {
-            "agnes-image": {
-                "label": "Agnes Image",
-                "icon": "🖼️",
-                "desc": "Free image gen",
-                "kind": "image",
-                "secret_name": "AGNES_API_KEY",
-                "model": "agnes-image-2.1-flash",
-            },
-            "agnes-video": {
-                "label": "Agnes Video",
-                "icon": "🎬",
-                "desc": "Free video gen",
-                "kind": "video",
-                "secret_name": "AGNES_API_KEY",
-                "model": "agnes-video-v2.0",
-            },
-            "minimax-music": {
-                "label": "MiniMax Music",
-                "icon": "🎵",
-                "desc": "100 calls/day",
-                "kind": "music",
-                "secret_name": "MINIMAX_API_KEY",
-            },
-            "musicapi-sonic": {
-                "label": "MusicAPI Sonic",
-                "icon": "🎼",
-                "desc": "75 free credits (signup)",
-                "kind": "music",
-                "secret_name": "MUSICAPI_KEY",
-            },
-            # New FREE models added below
-            "huggingface-image": {
-                "label": "Hugging Face Image",
-                "icon": "🤗",
-                "desc": "Free image gen (FLUX/SDXL)",
-                "kind": "image",
-                "secret_name": "HF_API_KEY",
-                "model": "black-forest-labs/FLUX.1-schnell",
-            },
-            "huggingface-video": {
-                "label": "Hugging Face Video",
-                "icon": "🎥",
-                "desc": "Free video gen (CogVideoX)",
-                "kind": "video",
-                "secret_name": "HF_API_KEY",
-                "model": "THUDM/CogVideoX-5b",
-            },
-            "huggingface-music": {
-                "label": "MusicGen",
-                "icon": "🎵",
-                "desc": "Meta's free music AI",
-                "kind": "music",
-                "secret_name": "HF_API_KEY",
-                "model": "facebook/musicgen-large",
-            },
-        },
-    },
-}
-DEFAULT_CHAT_MODEL = "groq-standard"
-
+# --- 15 IMAGE MODELS ---
 IMAGE_MODELS = {
-    "pollinations": {"label": "Pollinations AI", "icon": "🖼️", "desc": "Bilkul free"},
-    "agnes": {"label": "Agnes AI", "icon": "🤖", "desc": "Free, high quality"},
-    "huggingface": {"label": "Hugging Face", "icon": "🤗", "desc": "Free (FLUX/SDXL)"},  # NEW
+    # POLLINATIONS - No key needed
+    "pollinations": {"label": "Pollinations AI", "icon": "🖼️", "provider": "pollinations"},
+    
+    # AGNES - Free API
+    "agnes": {"label": "Agnes Image", "icon": "🤖", "provider": "agnes"},
+    
+    # HUGGING FACE FLUX MODELS
+    "flux_schnell": {"label": "FLUX.1-schnell", "icon": "⚡", "provider": "huggingface", "model": "black-forest-labs/FLUX.1-schnell"},
+    "flux_dev": {"label": "FLUX.1-dev", "icon": "🎨", "provider": "huggingface", "model": "black-forest-labs/FLUX.1-dev"},
+    
+    # STABLE DIFFUSION MODELS
+    "sdxl": {"label": "SDXL", "icon": "🌈", "provider": "huggingface", "model": "stabilityai/stable-diffusion-xl-base-1.0"},
+    "sd35": {"label": "SD 3.5", "icon": "✨", "provider": "huggingface", "model": "stabilityai/stable-diffusion-3.5-large"},
+    "playground": {"label": "Playground v2.5", "icon": "📸", "provider": "huggingface", "model": "playgroundai/playground-v2.5-1024px-aesthetic"},
+    "dreamshaper": {"label": "DreamShaper", "icon": "🌟", "provider": "huggingface", "model": "Lykon/dreamshaper-8"},
+    "realistic": {"label": "Realistic Vision", "icon": "👤", "provider": "huggingface", "model": "SG161222/Realistic_Vision_V4.0"},
+    "openjourney": {"label": "OpenJourney", "icon": "🎨", "provider": "huggingface", "model": "prompthero/openjourney-v4"},
+    
+    # NEW FREE MODELS
+    "kandinsky": {"label": "Kandinsky 2.2", "icon": "🎭", "provider": "huggingface", "model": "kandinsky-community/kandinsky-2-2-decoder"},
+    "wuerstchen": {"label": "Wuerstchen", "icon": "🐇", "provider": "huggingface", "model": "warp-ai/wuerstchen"},
+    "hunyuandit": {"label": "Hunyuan DiT", "icon": "🐉", "provider": "huggingface", "model": "Tencent-Hunyuan/Hunyuan-DiT"},
 }
 
+# --- 8 VIDEO MODELS ---
 VIDEO_MODELS = {
-    "agnes": {"label": "Agnes Video", "icon": "🎬", "desc": "Free, high quality"},
-    "huggingface": {"label": "Hugging Face", "icon": "🎥", "desc": "Free (CogVideoX)"},  # NEW
+    # AGNES - Free
+    "agnes": {"label": "Agnes Video", "icon": "🎬", "provider": "agnes"},
+    
+    # HUGGING FACE VIDEO MODELS
+    "cogvideox": {"label": "CogVideoX", "icon": "🎥", "provider": "huggingface_video", "model": "THUDM/CogVideoX-5b"},
+    "modelscope": {"label": "ModelScope", "icon": "🏔️", "provider": "huggingface_video", "model": "damo/ModelScope"},
+    "svd": {"label": "Stable Video Diffusion", "icon": "📹", "provider": "huggingface_video", "model": "stabilityai/stable-video-diffusion-img2vid"},
+    "pyramid": {"label": "Pyramid Flow", "icon": "🔺", "provider": "huggingface_video", "model": "PYRAMID-FLOW/pyramid-flow"},
+    "mochi": {"label": "Mochi-1", "icon": "🌀", "provider": "huggingface_video", "model": "genmo/mochi-1"},
+    
+    # NEW FREE VIDEO MODELS
+    "wan": {"label": "Wan 2.2", "icon": "🌊", "provider": "huggingface_video", "model": "Wan-AI/Wan2.2-T2V-A14B"},
+    "opensora": {"label": "Open-Sora 2.0", "icon": "🎞️", "provider": "huggingface_video", "model": "HPC-AI/Open-Sora"},
 }
 
+# --- 4 MUSIC MODELS ---
 MUSIC_MODELS = {
-    "minimax": {"label": "MiniMax", "icon": "🎵", "desc": "Paid balance chahiye"},
-    "musicapi": {"label": "MusicAPI Sonic", "icon": "🎼", "desc": "75 free credits"},
-    "huggingface": {"label": "MusicGen", "icon": "🎵", "desc": "Meta's free AI"},  # NEW
+    "musicgen": {"label": "MusicGen", "icon": "🎵", "provider": "huggingface_music", "model": "facebook/musicgen-large"},
+    "audiocraft": {"label": "AudioCraft", "icon": "🎶", "provider": "huggingface_music", "model": "facebook/audiocraft"},
+    "musicapi": {"label": "MusicAPI Sonic", "icon": "🎼", "provider": "musicapi"},
+    "minimax": {"label": "MiniMax Music", "icon": "🎵", "provider": "minimax"},
+}
+
+# --- 10 CHAT MODELS ---
+CHAT_MODELS = {
+    # GROQ MODELS
+    "groq_llama_8b": {"label": "Llama 3 8B", "icon": "⚡", "provider": "groq", "model_id": "llama3-8b-8192"},
+    "groq_llama_70b": {"label": "Llama 3 70B", "icon": "💪", "provider": "groq", "model_id": "llama3-70b-8192"},
+    "groq_mixtral": {"label": "Mixtral 8x7B", "icon": "🌪️", "provider": "groq", "model_id": "mixtral-8x7b-32768"},
+    "groq_gemma": {"label": "Gemma 2 9B", "icon": "✨", "provider": "groq", "model_id": "gemma2-9b-it"},
+    
+    # POLLINATIONS
+    "pollinations": {"label": "Pollinations Chat", "icon": "🌐", "provider": "pollinations"},
+    
+    # TOGETHER AI (Free tier)
+    "together": {"label": "Together AI", "icon": "🤝", "provider": "together", "model_id": "meta-llama/Llama-3.3-70B-Instruct-Turbo"},
+    
+    # HUGGING FACE CHAT
+    "hf_deepseek": {"label": "DeepSeek V3", "icon": "💎", "provider": "huggingface_chat", "model_id": "deepseek-ai/DeepSeek-V3"},
+    "hf_qwen": {"label": "Qwen 2.5", "icon": "🐉", "provider": "huggingface_chat", "model_id": "Qwen/Qwen2.5-72B-Instruct"},
+    "hf_phi": {"label": "Phi-3.5", "icon": "📚", "provider": "huggingface_chat", "model_id": "microsoft/Phi-3.5-mini-instruct"},
+    "hf_llama": {"label": "Llama 3.2 3B", "icon": "🦙", "provider": "huggingface_chat", "model_id": "meta-llama/Llama-3.2-3B-Instruct"},
 }
 
 # ============================================================
@@ -229,685 +156,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-# ============================================================
-# CUSTOM CSS - COMPLETE FIX WITH GAPS
-# ============================================================
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@300;400;500;600;700&display=swap');
-
-* { font-family: 'Google Sans', 'Roboto', 'Segoe UI', sans-serif !important; }
-
-/* Don't hijack Streamlit's built-in Material icon font — otherwise icons like
-   the sidebar collapse arrow, "expand_more", and "settings" render as raw
-   text (e.g. "keyboard_double_arrow_left") instead of actual icon glyphs. */
-span[data-testid="stIconMaterial"],
-[class*="material-symbols"],
-[class*="material-icons"] {
-    font-family: 'Material Symbols Rounded', 'Material Symbols Outlined', 'Material Icons' !important;
-}
-
-/* === RESET === */
-.block-container {
-    padding-top: 0.5rem !important;
-    padding-bottom: 0.5rem !important;
-    padding-left: 0.5rem !important;
-    padding-right: 0.5rem !important;
-    max-width: 100% !important;
-}
-div[data-testid="stElementContainer"],
-div[data-testid="stVerticalBlock"],
-div[data-testid="stHorizontalBlock"],
-div[data-testid="column"],
-div[data-testid="column"] > div,
-div.st-emotion-cache-1r6slb0 {
-    padding: 0 !important;
-    margin: 0 !important;
-    gap: 0 !important;
-}
-
-/* breathing room between stacked sidebar elements (nav buttons, popovers, etc) */
-section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] {
-    margin-bottom: 6px !important;
-}
-
-/* breathing room between stacked elements in the main column */
-.main-glass div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] {
-    margin-bottom: 10px !important;
-}
-/* generous, even gap between side-by-side controls (prompt box + model
-   picker, source + target language, etc.) and bottom-align them so a tall
-   textarea and a short selectbox don't look "stuck" to each other */
-.main-glass div[data-testid="stHorizontalBlock"] {
-    gap: 24px !important;
-    align-items: flex-end !important;
-}
-
-.stApp > header,
-.stApp > footer {
-    display: none !important;
-}
-
-.stApp {
-    background: #ffffff;
-    min-height: 100vh;
-}
-
-/* === SIDEBAR === */
-section[data-testid="stSidebar"] {
-    background: #ffffff !important;
-    border-right: none !important;
-    padding-top: 16px !important;
-    padding-left: 10px !important;
-    padding-right: 10px !important;
-}
-section[data-testid="stSidebar"] * {
-    color: #1f1f1f !important;
-}
-section[data-testid="stSidebar"] hr {
-    display: none !important;
-}
-section[data-testid="stSidebar"] div.stButton > button {
-    background: transparent !important;
-    border: none !important;
-    border-radius: 24px !important;
-    color: #444746 !important;
-    text-align: left !important;
-    padding: 12px 16px !important;
-    margin-bottom: 4px !important;
-    font-weight: 400 !important;
-    font-size: 14px !important;
-    box-shadow: none !important;
-}
-section[data-testid="stSidebar"] div.stButton > button:hover {
-    background: #f0f4f9 !important;
-}
-section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
-    background: #d3e3fd !important;
-    border: none !important;
-    color: #041e49 !important;
-    font-weight: 500 !important;
-}
-section[data-testid="stSidebar"] div[data-testid="stPopover"] button {
-    background: transparent !important;
-    border: none !important;
-    border-radius: 24px !important;
-    color: #444746 !important;
-    text-align: left !important;
-    box-shadow: none !important;
-}
-section[data-testid="stSidebar"] div[data-testid="stPopover"] button:hover {
-    background: #f0f4f9 !important;
-}
-
-/* === MAIN GLASS === */
-.main-glass {
-    background: #ffffff;
-    max-width: 900px;
-    padding: 6px 18px 10px 18px;
-    margin: 0 auto;
-    border: none;
-}
-
-/* === HEADER - LOGO FIXED === */
-.gemini-header {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    padding: 50px 0 10px 0 !important;
-    border-bottom: none !important;
-    background: transparent !important;
-    position: relative !important;
-    z-index: 100 !important;
-    margin-bottom: 4px !important;
-}
-.gemini-brand {
-    display: flex !important;
-    align-items: center !important;
-    gap: 12px !important;
-    background: transparent !important;
-}
-.gemini-brand svg {
-    width: 34px !important;
-    height: 34px !important;
-}
-.gemini-title {
-    font-size: 22px !important;
-    font-weight: 600 !important;
-    background: linear-gradient(90deg, #4285f4, #9b72cb, #d96570) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-}
-.gemini-avatar {
-    width: 36px !important;
-    height: 36px !important;
-    border-radius: 50% !important;
-    background: linear-gradient(135deg, #4285f4, #34a853) !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-weight: 700 !important;
-    font-size: 15px !important;
-    color: #fff !important;
-}
-
-/* === HERO === */
-.hero-text {
-    text-align: center;
-    padding: 32px 0 24px 0;
-}
-.hero-text h1 {
-    font-size: 30px;
-    font-weight: 600;
-    background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin: 0 0 4px 0;
-}
-.hero-text p {
-    font-size: 15px;
-    color: #5f6368;
-    margin: 0 0 28px 0;
-}
-
-/* === QUICK ACTIONS - WITH PROPER GAPS === */
-.quick-actions {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    max-width: 650px;
-    margin: 14px auto 10px auto;
-}
-.quick-action-btn {
-    background: #f0f4f9;
-    border: none;
-    border-radius: 18px;
-    padding: 16px 14px;
-    text-align: left;
-    transition: background 0.15s ease;
-    cursor: pointer;
-}
-.quick-action-btn:hover {
-    background: #e8eef6;
-}
-.quick-action-btn .icon { font-size: 20px; display: block; margin-bottom: 10px; }
-.quick-action-btn .label { color: #1f1f1f; font-weight: 400; font-size: 14px; }
-.quick-action-btn .desc { color: #5f6368; font-size: 11px; margin-top: 2px; }
-
-/* === CHAT WRAPPER === */
-.chat-wrapper {
-    max-width: 700px;
-    margin: 10px auto 0 auto;
-    position: relative;
-}
-.chat-wrapper .stChatInput {
-    max-width: 100% !important;
-}
-.chat-wrapper .stChatInput textarea {
-    background: #f0f4f9 !important;
-    border: 1px solid #e8eaed !important;
-    border-radius: 14px !important;
-    padding: 14px 18px !important;
-    font-size: 15px !important;
-    color: #1f1f1f !important;
-    min-height: 52px !important;
-}
-.chat-wrapper .stChatInput textarea:focus {
-    border-color: #4285f4 !important;
-    box-shadow: 0 0 0 3px rgba(66,133,244,0.12) !important;
-}
-
-/* === CHAT INPUT FORM STYLING === */
-/* Inline chat form (replaces st.chat_input, which cannot be un-stuck from
-   the browser bottom on any Streamlit version) — styled as one continuous
-   rounded pill (like Gemini's "Ask Gemini" bar), text + send button fused
-   together instead of two separate boxes. Uses data-testid selectors (not
-   the newer st-key- class) so it works on older Streamlit versions too. */
-div[data-testid="stForm"] {
-    border: 1px solid #e0e3e8 !important;
-    border-radius: 28px !important;
-    padding: 30px 50px 30px 50px !important;
-    background: #f8f9fb !important;
-    margin-top: 10px !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
-    transition: box-shadow 0.15s ease, border-color 0.15s ease;
-}
-div[data-testid="stForm"]:focus-within {
-    border-color: #4285f4 !important;
-    box-shadow: 0 1px 8px rgba(66,133,244,0.18) !important;
-}
-div[data-testid="stForm"] div[data-testid="stHorizontalBlock"] {
-    align-items: center !important;
-    gap: 8px !important;
-}
-div[data-testid="stForm"] input[type="text"] {
-    background: transparent !important;
-    color: #1f1f1f !important;
-    border: none !important;
-    padding: 14px 4px !important;
-    height: 30px !important;
-    font-size: 15px !important;
-}
-div[data-testid="stForm"] input[type="text"]:focus {
-    box-shadow: none !important;
-    outline: none !important;
-}
-div[data-testid="stFormSubmitButton"] button {
-    border-radius: 50% !important;
-    width: 42px !important;
-    height: 42px !important;
-    padding: 0 !important;
-    background: #4285f4 !important;
-    color: #fff !important;
-    border: none !important;
-    font-size: 17px !important;
-    box-shadow: none !important;
-}
-div[data-testid="stFormSubmitButton"] button:hover {
-    background: #3367d6 !important;
-}
-
-/* === MODEL SELECTOR (real popover trigger, right-aligned, pill-styled) === */
-.main-glass div[data-testid="stPopover"] {
-    display: flex !important;
-    justify-content: flex-end !important;
-    margin-bottom: 8px !important;
-}
-.main-glass div[data-testid="stPopover"] > button {
-    background: #f0f4f9 !important;
-    border: none !important;
-    border-radius: 20px !important;
-    padding: 6px 16px !important;
-    font-size: 12px !important;
-    color: #444746 !important;
-    font-weight: 500 !important;
-    box-shadow: none !important;
-    width: auto !important;
-}
-.main-glass div[data-testid="stPopover"] > button:hover {
-    background: #e8eef6 !important;
-}
-
-/* === MODEL LIST INSIDE THE POPOVER — compact, distinct FREE/PRO look === */
-div[data-testid="stPopoverBody"] {
-    min-width: 230px !important;
-}
-div[data-testid="stPopoverBody"] div.stButton > button {
-    background: #f7f9fc !important;
-    color: #1f1f1f !important;
-    border: 1px solid #e3e8ef !important;
-    border-radius: 12px !important;
-    padding: 7px 12px !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    text-align: left !important;
-    box-shadow: none !important;
-    margin-bottom: 1px !important;
-}
-div[data-testid="stPopoverBody"] div.stButton > button:hover {
-    background: #eef2f8 !important;
-    border-color: #c7d2e0 !important;
-}
-div[data-testid="stPopoverBody"] div.stButton > button:disabled {
-    opacity: 0.5 !important;
-}
-div[data-testid="stPopoverBody"] .stCaption {
-    margin: -4px 0 8px 4px !important;
-}
-.model-section-label {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
-    padding: 13px 12px 16px 2px;
-    border-radius: 8px;
-    margin: 8px 0 8px 2px;
-}
-.model-section-label.free { background: #e8f0fe; color: #1a56db; }
-.model-section-label.pro { background: #fdeee9; color: #b3541e; }
-
-/* === GENERATION INPUTS (Image / Video / Music / Translate prompt boxes) === */
-.main-glass div[data-testid="stTextArea"] textarea {
-    background: #f0f4f9 !important;
-    border: 1px solid #e8eaed !important;
-    border-radius: 14px !important;
-    padding: 14px 18px !important;
-    font-size: 15px !important;
-    color: #1f1f1f !important;
-}
-.main-glass div[data-testid="stTextArea"] textarea:focus {
-    border-color: #4285f4 !important;
-    box-shadow: 0 0 0 3px rgba(66,133,244,0.12) !important;
-}
-
-/* === SELECTBOX (Model / Source / Target pickers) === */
-.main-glass div[data-testid="stSelectbox"] label {
-    font-size: 12px !important;
-    color: #5f6368 !important;
-    font-weight: 500 !important;
-    margin-bottom: 4px !important;
-}
-.main-glass div[data-testid="stSelectbox"] > div > div {
-    background: #f0f4f9 !important;
-    border: 1px solid #e8eaed !important;
-    border-radius: 14px !important;
-    min-height: 44px !important;
-}
-.main-glass div[data-testid="stSelectbox"] > div > div:hover {
-    border-color: #4285f4 !important;
-}
-
-/* on narrow screens, stack the prompt box above the model/language
-   pickers instead of squeezing them side-by-side */
-@media (max-width: 640px) {
-    .main-glass div[data-testid="stHorizontalBlock"]:has(div[data-testid="stTextArea"]) {
-        flex-wrap: wrap !important;
-    }
-    .main-glass div[data-testid="stHorizontalBlock"]:has(div[data-testid="stTextArea"]) > div[data-testid="column"] {
-        min-width: 100% !important;
-    }
-}
-
-/* === CHAT MESSAGES === */
-.stChatMessage {
-    background: #f0f4f9 !important;
-    border: none !important;
-    border-radius: 18px !important;
-    padding: 12px 18px !important;
-    margin-bottom: 10px !important;
-    box-shadow: none !important;
-}
-.stChatMessage p, .stChatMessage span {
-    color: #1f1f1f !important;
-}
-
-/* scrollable chat history box — keeps growing chats contained instead of
-   pushing the page (and the logo) up as more messages are sent. Sizes to
-   its content and only starts scrolling once it hits max-height, so a
-   short conversation doesn't leave a big empty gap before the input box. */
-div.st-key-chat_msg_box {
-    height: auto !important;
-    max-height: 58vh !important;
-    overflow-y: auto !important;
-    padding-right: 6px !important;
-}
-div.st-key-chat_msg_box::-webkit-scrollbar {
-    width: 6px;
-}
-div.st-key-chat_msg_box::-webkit-scrollbar-thumb {
-    background: #d8dde3;
-    border-radius: 10px;
-}
-
-/* === BUTTONS === */
-div.stButton > button {
-    border-radius: 20px !important;
-    font-weight: 500 !important;
-    font-size: 14px !important;
-    padding: 10px 24px !important;
-    border: none !important;
-    background: #4285f4 !important;
-    color: white !important;
-    box-shadow: none !important;
-}
-div.stButton > button:hover {
-    background: #3367d6 !important;
-}
-
-/* === SCROLL GALLERY - LEFT TO RIGHT === */
-.creativity-footer {
-    margin-top: 24px;
-    padding: 18px 0 12px 0;
-    border-top: 1px solid #e8eaed;
-    text-align: center;
-}
-.creativity-footer h2 {
-    font-size: 24px;
-    font-weight: 700;
-    background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 8px;
-}
-.creativity-footer .subtitle {
-    color: #5f6368;
-    font-size: 13px;
-    margin-bottom: 12px;
-}
-
-.scroll-wrapper {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 6px 0;
-}
-.scroll-container {
-    width: 82%;
-    overflow: hidden;
-    border-radius: 14px;
-}
-.scroll-track {
-    display: flex;
-    gap: 20px;
-    transition: transform 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    width: max-content;
-}
-.scroll-item {
-    flex: 0 0 auto;
-    width: 200px;
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid #e8eaed;
-    background: #f8f9fa;
-    transition: all 0.3s ease;
-}
-.scroll-item:hover {
-    transform: scale(1.05);
-    border-color: #4285f4;
-    box-shadow: 0 4px 18px rgba(66,133,244,0.15);
-    z-index: 5;
-}
-.scroll-item img {
-    width: 100%;
-    height: 355px;
-    object-fit: cover;
-    display: block;
-    aspect-ratio: 9/16;
-}
-.scroll-item .caption {
-    padding: 6px 10px;
-    font-size: 9px;
-    color: #5f6368;
-    text-align: center;
-    background: #f1f3f4;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.scroll-btn {
-    background: #e8f0fe !important;
-    border: 1px solid #d2e3fc !important;
-    border-radius: 50% !important;
-    width: 42px !important;
-    height: 42px !important;
-    min-width: 42px !important;
-    padding: 0 !important;
-    font-size: 18px !important;
-    color: #1a73e8 !important;
-    cursor: pointer !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    transition: all 0.3s ease !important;
-}
-.scroll-btn:hover {
-    background: #d2e3fc !important;
-    transform: scale(1.1) !important;
-}
-
-/* === SIDEBAR DIVIDERS === */
-.sidebar-divider {
-    border-top: 1px solid #e8eaed;
-    margin: 10px 0;
-}
-
-/* === RESPONSIVE === */
-@media (max-width: 768px) {
-    .main-glass { padding: 8px 10px; margin: 0 auto; }
-    .hero-text { padding: 20px 0 14px 0; }
-    .hero-text h1 { font-size: 22px; }
-    .quick-actions { grid-template-columns: 1fr 1fr; gap: 8px; }
-    .scroll-item { width: 140px; }
-    .scroll-item img { height: 248px; }
-    .scroll-container { width: 72%; }
-    .scroll-btn { width: 34px !important; height: 34px !important; min-width: 34px !important; font-size: 14px !important; }
-    .main-glass div[data-testid="stPopover"] > button { font-size: 11px !important; padding: 5px 12px !important; }
-    .gemini-title { font-size: 17px !important; }
-    .gemini-brand svg { width: 26px !important; height: 26px !important; }
-    .gemini-avatar { width: 28px !important; height: 28px !important; font-size: 12px !important; }
-    div[data-testid="stForm"] { padding: 30px 10px 20px 10px !important; }
-    div[data-testid="stForm"] input[type="text"] { font-size: 14px !important; padding: 11px 4px !important; }
-    div[data-testid="stFormSubmitButton"] button { width: 36px !important; height: 36px !important; font-size: 15px !important; }
-}
-@media (max-width: 480px) {
-    .quick-actions { grid-template-columns: 1fr; }
-    .scroll-item { width: 120px; }
-    .scroll-item img { height: 213px; }
-}
-</style>
-
-<div class="main-glass">
-""", unsafe_allow_html=True)
-
-# --- scoped dark/black "studio card" styling for the Image + Video studio
-# tools, inspired by the Higgsfield-style layout the user asked for, in
-# black instead of their lime accent. Scoped to .st-key-img_studio_card /
-# .st-key-vid_studio_card so nothing outside these two containers is
-# touched — every other tab/page keeps its existing look untouched.
-# NOTE: this used to live inside "if active_tab == 'image':", which meant
-# it silently never got injected while the Video tab was open (each tab
-# body only runs when it's the active one) — that's why the video studio's
-# ratio pill + Generate button rendered squished with no gap. Injecting it
-# here, unconditionally, makes it apply on every tab. ---
-st.markdown("""
-<style>
-div.st-key-img_studio_card, div.st-key-vid_studio_card {
-    background: center;
-    border: 1px solid #232323 !important;
-    border-radius: 22px !important;
-    padding: 20px 22px 22px 22px !important;
-    max-width: 800px !important;
-    margin: 4px auto 26px auto !important;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.25);
-}
-div.st-key-img_studio_card div[data-testid="stTextArea"],
-div.st-key-vid_studio_card div[data-testid="stTextArea"] {
-    margin-bottom: 6px !important;
-}
-div.st-key-img_studio_card div[data-testid="stTextArea"] textarea,
-div.st-key-vid_studio_card div[data-testid="stTextArea"] textarea {
-    background: transparent !important;
-    border: none !important;
-    color: black;
-    font-size: 16px !important;
-    padding: 6px 4px 14px 4px !important;
-    min-height: 60px !important;
-}
-div.st-key-img_studio_card div[data-testid="stTextArea"] textarea::placeholder,
-div.st-key-vid_studio_card div[data-testid="stTextArea"] textarea::placeholder {
-    color: #8a8a8a !important;
-}
-div.st-key-img_studio_card div[data-testid="stTextArea"] textarea:focus,
-div.st-key-vid_studio_card div[data-testid="stTextArea"] textarea:focus {
-    box-shadow: none !important;
-    border: none !important;
-}
-/* control row (ratio / model pickers + generate button) — extra
-   breathing room so the pills and button don't read as one glued
-   strip; real gap + real padding, not just a border line */
-div.st-key-img_studio_card div[data-testid="stHorizontalBlock"],
-div.st-key-vid_studio_card div[data-testid="stHorizontalBlock"] {
-    border-top: 1px solid #212121 !important;
-    padding-top: 18px !important;
-    margin-top: 10px !important;
-    align-items: center !important;
-    gap: 16px !important;
-}
-div.st-key-img_studio_card div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
-div.st-key-vid_studio_card div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-    padding: 0 4px !important;
-}
-div.st-key-img_studio_card div[data-testid="stSelectbox"] label,
-div.st-key-vid_studio_card div[data-testid="stSelectbox"] label {
-    display: none !important;
-}
-div.st-key-img_studio_card div[data-testid="stSelectbox"] > div > div,
-div.st-key-vid_studio_card div[data-testid="stSelectbox"] > div > div {
-    background: #161616 !important;
-    border: 1px solid #2b2b2b !important;
-    border-radius: 20px !important;
-    color: #f0f0f0 !important;
-    min-height: 42px !important;
-    font-size: 13px !important;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
-}
-/* force the actual value text + dropdown arrow icon to a light color —
-   Streamlit's own theme was setting a dark color deep inside, which made
-   the pill look "all black" with no readable text */
-div.st-key-img_studio_card div[data-testid="stSelectbox"] *,
-div.st-key-vid_studio_card div[data-testid="stSelectbox"] * {
-    color: #f0f0f0 !important;
-    fill: #f0f0f0 !important;
-}
-div.st-key-img_studio_card div[data-testid="stSelectbox"] > div > div:hover,
-div.st-key-vid_studio_card div[data-testid="stSelectbox"] > div > div:hover {
-    border-color: #7c5cff !important;
-    box-shadow: 0 0 0 3px rgba(124,92,255,0.15) !important;
-}
-/* the "AI" generate button — brand gradient + glow instead of flat
-   black, with a hover lift so it actually feels alive/clickable */
-div.st-key-img_studio_card div.stButton > button,
-div.st-key-vid_studio_card div.stButton > button {
-    background: linear-gradient(135deg, #7c5cff 0%, #b45cff 55%, #ff6ec7 100%) !important;
-    color: #ffffff !important;
-    border: none !important;
-    border-radius: 14px !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.2px !important;
-    min-height: 42px !important;
-    box-shadow: 0 4px 18px rgba(124,92,255,0.35) !important;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease !important;
-}
-div.st-key-img_studio_card div.stButton > button:hover,
-div.st-key-vid_studio_card div.stButton > button:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 6px 22px rgba(124,92,255,0.5) !important;
-    filter: brightness(1.06) !important;
-}
-div.st-key-img_studio_card div.stButton > button:active,
-div.st-key-vid_studio_card div.stButton > button:active {
-    transform: translateY(0) !important;
-    box-shadow: 0 3px 12px rgba(124,92,255,0.35) !important;
-}
-/* the % progress bar shown while an image/video is generating */
-div.st-key-img_studio_card div[data-testid="stProgress"],
-div.st-key-vid_studio_card div[data-testid="stProgress"],
-div[data-testid="stProgress"] {
-    margin-top: 14px !important;
-}
-div[data-testid="stProgress"] > div > div > div {
-    background: linear-gradient(90deg, #7c5cff, #ff6ec7) !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ============================================================
-# SYSTEM PROMPT
-# ============================================================
-SYSTEM_PROMPT = f"You are {APP_NAME}, an extremely knowledgeable, precise, and helpful assistant. Reply in the same language the user writes in."
 
 # ============================================================
 # USAGE DB
@@ -951,13 +199,9 @@ def increment_today_count(ip):
     finally:
         conn.close()
 
-# ============================================================
-# 🪙 TOKEN WALLET — per Google account, resets daily
-# ============================================================
 def get_tokens_used_today(email):
-    """Tokens already spent today by this Google account."""
     if not email:
-        return TOKEN_LIMIT_PER_DAY  # no identity, no wallet — treat as exhausted
+        return TOKEN_LIMIT_PER_DAY
     today = date.today().isoformat()
     conn = _usage_db()
     try:
@@ -967,14 +211,9 @@ def get_tokens_used_today(email):
         conn.close()
 
 def get_tokens_remaining(email):
-    """How many of today's free tokens this account has left (0-TOKEN_LIMIT_PER_DAY)."""
     return max(0, TOKEN_LIMIT_PER_DAY - get_tokens_used_today(email))
 
 def deduct_tokens(email, amount):
-    """Checks the balance and deducts `amount` for today in one DB pass.
-    Returns True if there was enough balance and it was deducted,
-    False if the account doesn't have `amount` tokens left today
-    (in which case nothing is deducted)."""
     if not email:
         return False
     today = date.today().isoformat()
@@ -995,7 +234,7 @@ def deduct_tokens(email, amount):
         conn.close()
 
 # ============================================================
-# 🔐 LOGIN GATE — Google sign-in required before using any generator
+# 🔐 LOGIN GATE
 # ============================================================
 try:
     _is_logged_in = bool(st.user.is_logged_in)
@@ -1009,8 +248,7 @@ if not _is_logged_in:
         <div style='font-size:24px; font-weight:600; color:#1f1f1f; margin-bottom:8px;'>{APP_NAME}</div>
         <div style='font-size:14px; color:#5f6368; margin-bottom:26px;'>
             Chat, Image, Video, Music — sab use karne ke liye pehle apne Google account se sign in karo.<br>
-            Sign in ke baad har account ko roz <b>{TOKEN_LIMIT_PER_DAY} free tokens</b> milte hain
-            (🖼️ Image = {IMAGE_TOKEN_COST} tokens, 🎬 Video = {VIDEO_TOKEN_COST} tokens).
+            Sign in ke baad har account ko roz <b>{TOKEN_LIMIT_PER_DAY} free tokens</b> milte hain.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1021,15 +259,9 @@ if not _is_logged_in:
             try:
                 st.login("google")
             except Exception as e:
-                st.error(
-                    "⚠️ Google login abhi server par configure nahi hai. "
-                    "`.streamlit/secrets.toml` me `[auth]` aur `[auth.google]` "
-                    f"section add karke Google OAuth client_id/secret set karo.\n\nDetail: {e}"
-                )
+                st.error(f"⚠️ Google login error: {e}")
     st.stop()
 
-# Signed-in Google identity — used everywhere below as the account key
-# for the daily token wallet.
 USER_EMAIL = st.user.email
 USER_DISPLAY_NAME = st.user.name or (USER_EMAIL.split("@")[0] if USER_EMAIL else "Dost")
 USER_PICTURE = getattr(st.user, "picture", None)
@@ -1047,7 +279,7 @@ if "current_chat_id" not in st.session_state:
     st.session_state.current_chat_id = new_id
 
 if "selected_chat_model" not in st.session_state:
-    st.session_state.selected_chat_model = DEFAULT_CHAT_MODEL
+    st.session_state.selected_chat_model = "groq_llama_8b"
 
 if "gallery" not in st.session_state:
     st.session_state.gallery = []
@@ -1059,10 +291,158 @@ if "selected_video_model" not in st.session_state:
     st.session_state.selected_video_model = "agnes"
 
 if "selected_music_model" not in st.session_state:
-    st.session_state.selected_music_model = "minimax"
+    st.session_state.selected_music_model = "musicgen"
 
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "chat"
+
+# ============================================================
+# CUSTOM CSS
+# ============================================================
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap');
+
+* { font-family: 'Google Sans', 'Segoe UI', sans-serif !important; }
+
+.block-container {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    max-width: 100% !important;
+}
+
+.stApp { background: #ffffff; min-height: 100vh; }
+.stApp > header, .stApp > footer { display: none !important; }
+
+section[data-testid="stSidebar"] {
+    background: #ffffff !important;
+    border-right: none !important;
+    padding-top: 16px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+}
+section[data-testid="stSidebar"] * { color: #1f1f1f !important; }
+section[data-testid="stSidebar"] hr { display: none !important; }
+section[data-testid="stSidebar"] div.stButton > button {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 24px !important;
+    color: #444746 !important;
+    text-align: left !important;
+    padding: 12px 16px !important;
+    margin-bottom: 4px !important;
+    font-weight: 400 !important;
+    font-size: 14px !important;
+    box-shadow: none !important;
+}
+section[data-testid="stSidebar"] div.stButton > button:hover { background: #f0f4f9 !important; }
+section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
+    background: #d3e3fd !important;
+    border: none !important;
+    color: #041e49 !important;
+    font-weight: 500 !important;
+}
+
+.main-glass {
+    background: #ffffff;
+    max-width: 900px;
+    padding: 6px 18px 10px 18px;
+    margin: 0 auto;
+    border: none;
+}
+
+.gemini-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 50px 0 10px 0 !important;
+    border-bottom: none !important;
+    background: transparent !important;
+    margin-bottom: 4px !important;
+}
+.gemini-brand {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    background: transparent !important;
+}
+.gemini-brand svg { width: 34px !important; height: 34px !important; }
+.gemini-title {
+    font-size: 22px !important;
+    font-weight: 600 !important;
+    background: linear-gradient(90deg, #4285f4, #9b72cb, #d96570) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+}
+
+.hero-text { text-align: center; padding: 32px 0 24px 0; }
+.hero-text h1 {
+    font-size: 30px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0 0 4px 0;
+}
+.hero-text p { font-size: 15px; color: #5f6368; margin: 0 0 28px 0; }
+
+.stChatMessage {
+    background: #f0f4f9 !important;
+    border: none !important;
+    border-radius: 18px !important;
+    padding: 12px 18px !important;
+    margin-bottom: 10px !important;
+    box-shadow: none !important;
+}
+.stChatMessage p, .stChatMessage span { color: #1f1f1f !important; }
+
+div.st-key-chat_msg_box {
+    height: auto !important;
+    max-height: 58vh !important;
+    overflow-y: auto !important;
+    padding-right: 6px !important;
+}
+
+div[data-testid="stSelectbox"] > div > div {
+    background: #f0f4f9 !important;
+    border: 1px solid #e8eaed !important;
+    border-radius: 14px !important;
+    min-height: 44px !important;
+}
+
+div.stButton > button {
+    border-radius: 20px !important;
+    font-weight: 500 !important;
+    font-size: 14px !important;
+    padding: 10px 24px !important;
+    border: none !important;
+    background: #4285f4 !important;
+    color: white !important;
+    box-shadow: none !important;
+}
+div.stButton > button:hover { background: #3367d6 !important; }
+
+div.st-key-img_studio_card, div.st-key-vid_studio_card {
+    background: #fafafa;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 22px !important;
+    padding: 20px 22px 22px 22px !important;
+    max-width: 800px !important;
+    margin: 4px auto 26px auto !important;
+}
+
+@media (max-width: 768px) {
+    .main-glass { padding: 8px 10px; margin: 0 auto; }
+    .hero-text { padding: 20px 0 14px 0; }
+    .hero-text h1 { font-size: 22px; }
+    .gemini-title { font-size: 17px !important; }
+}
+</style>
+
+<div class="main-glass">
+""", unsafe_allow_html=True)
 
 # ============================================================
 # FUNCTIONS
@@ -1080,250 +460,17 @@ def switch_chat(chat_id):
     st.session_state.active_tab = "chat"
     st.rerun()
 
-def get_model_info(model_id):
-    for tier in MODEL_TIERS.values():
-        if model_id in tier["models"]:
-            return tier["models"][model_id]
-    return MODEL_TIERS["free"]["models"][DEFAULT_CHAT_MODEL]
-
 # ============================================================
-# RENDER SCROLLING GALLERY - LEFT TO RIGHT
+# 🎯 API CALLS - ALL 30+ FREE MODELS
 # ============================================================
-def render_creativity_footer():
-    """Render scrolling gallery with left to right scroll.
 
-    NOTE: this uses components.html (an iframe) instead of st.markdown.
-    st.markdown(..., unsafe_allow_html=True) injects HTML via
-    dangerouslySetInnerHTML on the frontend, and browsers never execute
-    <script> tags that are inserted that way - so the scrollGallery_xxx()
-    function was simply never defined, and the ◀ ▶ buttons had nothing to
-    call. components.html renders in a real sandboxed document, so its
-    <script> actually runs.
-    """
+SYSTEM_PROMPT = f"You are {APP_NAME}, an extremely knowledgeable, precise, and helpful assistant. Reply in the same language the user writes in."
 
-    selected_prompts = random.sample(HIGH_QUALITY_PROMPTS, min(10, len(HIGH_QUALITY_PROMPTS)))
-    gallery_id = f"gallery_{random.randint(1000, 9999)}"
-
-    items_html = ""
-    for prompt in selected_prompts * 2:
-        img_url = f"https://image.pollinations.ai/prompt/{quote(prompt)}?width=600&height=1067&model=flux&enhance=true&nologo=true"
-        caption = prompt[:25] + "..." if len(prompt) > 25 else prompt
-        items_html += f"""<div class="scroll-item">
-            <img src="{img_url}" alt="{caption}" loading="lazy" onerror="this.style.display='none'">
-            <div class="caption">🎨 {caption}</div>
-        </div>"""
-
-    gallery_html = f"""
-    <style>
-        * {{ box-sizing: border-box; }}
-        body {{
-            margin: 0;
-            padding: 0;
-            font-family: 'Google Sans', Roboto, Arial, sans-serif;
-            background: transparent;
-            overflow: hidden;
-        }}
-        .creativity-footer {{
-            margin-top: 8px;
-            padding: 10px 0 12px 0;
-            text-align: center;
-        }}
-        .creativity-footer h2 {{
-            font-size: 24px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin: 0 0 8px 0;
-        }}
-        .creativity-footer .subtitle {{
-            color: #5f6368;
-            font-size: 13px;
-            margin: 0 0 12px 0;
-        }}
-        .scroll-wrapper {{
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            padding: 6px 0;
-        }}
-        .scroll-container {{
-            width: 82%;
-            overflow: hidden;
-            border-radius: 14px;
-        }}
-        .scroll-track {{
-            display: flex;
-            gap: 20px;
-            transition: transform 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-            width: max-content;
-        }}
-        .scroll-item {{
-            flex: 0 0 auto;
-            width: 200px;
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid #e8eaed;
-            background: #f8f9fa;
-            transition: all 0.3s ease;
-        }}
-        .scroll-item:hover {{
-            transform: scale(1.05);
-            border-color: #4285f4;
-            box-shadow: 0 4px 18px rgba(66,133,244,0.15);
-            z-index: 5;
-        }}
-        .scroll-item img {{
-            width: 100%;
-            height: 355px;
-            object-fit: cover;
-            display: block;
-            aspect-ratio: 9/16;
-        }}
-        .scroll-item .caption {{
-            padding: 6px 10px;
-            font-size: 9px;
-            color: #5f6368;
-            text-align: center;
-            background: #f1f3f4;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }}
-        .scroll-btn {{
-            background: #e8f0fe;
-            border: 1px solid #d2e3fc;
-            border-radius: 50%;
-            width: 42px;
-            height: 42px;
-            min-width: 42px;
-            padding: 0;
-            font-size: 18px;
-            color: #1a73e8;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s ease;
-        }}
-        .scroll-btn:hover {{
-            background: #d2e3fc;
-            transform: scale(1.1);
-        }}
-        @media (max-width: 768px) {{
-            .scroll-item {{ width: 140px; }}
-            .scroll-item img {{ height: 248px; }}
-            .scroll-container {{ width: 72%; }}
-            .scroll-btn {{ width: 34px; height: 34px; min-width: 34px; font-size: 14px; }}
-        }}
-    </style>
-
-    <div class="creativity-footer">
-        <h2>✨ Our Unique Creativity</h2>
-        <p class="subtitle">4K Quality • 9:16 Ratio • Left to Right Scroll</p>
-        <div class="scroll-wrapper">
-            <button class="scroll-btn" id="btn_left_{gallery_id}">◀</button>
-            <div class="scroll-container" id="container_{gallery_id}">
-                <div class="scroll-track" id="track_{gallery_id}">
-                    {items_html}
-                </div>
-            </div>
-            <button class="scroll-btn" id="btn_right_{gallery_id}">▶</button>
-        </div>
-        <p style="color: #5f6368; font-size: 10px; margin-top: 10px; opacity: 0.6;">
-            ◀ ▶ Click to Scroll • Hover to Pause
-        </p>
-    </div>
-
-    <script>
-    (function() {{
-        var container = document.getElementById('container_{gallery_id}');
-        var track = document.getElementById('track_{gallery_id}');
-        var items = track.querySelectorAll('.scroll-item');
-        var itemWidth = items.length > 0 ? items[0].offsetWidth + 20 : 220;
-        var currentPos = 0;
-        var isPaused = false;
-
-        function getMaxScroll() {{
-            return Math.max(0, (items.length / 2) * itemWidth - container.offsetWidth);
-        }}
-
-        function goTo(pos) {{
-            var maxScroll = getMaxScroll();
-            currentPos = Math.max(0, Math.min(maxScroll, pos));
-            track.style.transform = 'translateX(-' + currentPos + 'px)';
-        }}
-
-        function scrollGallery(direction) {{
-            var step = itemWidth * 2;
-            if (direction === 'left') {{
-                goTo(currentPos - step);
-            }} else {{
-                goTo(currentPos + step);
-            }}
-        }}
-
-        document.getElementById('btn_left_{gallery_id}').addEventListener('click', function() {{
-            scrollGallery('left');
-        }});
-        document.getElementById('btn_right_{gallery_id}').addEventListener('click', function() {{
-            scrollGallery('right');
-        }});
-
-        function autoScroll() {{
-            if (!isPaused && items.length > 0) {{
-                var maxScroll = getMaxScroll();
-                if (currentPos >= maxScroll) {{
-                    currentPos = 0;
-                    track.style.transform = 'translateX(0px)';
-                }} else {{
-                    goTo(currentPos + itemWidth);
-                }}
-            }}
-        }}
-
-        setInterval(autoScroll, 2800);
-
-        container.addEventListener('mouseenter', function() {{ isPaused = true; }});
-        container.addEventListener('mouseleave', function() {{ isPaused = false; }});
-
-        window.addEventListener('resize', function() {{
-            itemWidth = items.length > 0 ? items[0].offsetWidth + 20 : itemWidth;
-        }});
-    }})();
-    </script>
-    """
-
-    components.html(gallery_html, height=560, scrolling=False)
-
-# ============================================================
-# API CALLS
-# ============================================================
+# --- CHAT APIS ---
 def call_groq_chat(api_key, model, messages, temp=0.4):
     if not api_key:
-        return "⚠️ GROQ_API_KEY set nahi hai."
+        return "⚠️ GROQ_API_KEY set nahi hai. Groq console se free key lo."
     url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    full = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
-    resp = requests.post(url, headers=headers, json={"model": model, "messages": full, "temperature": temp, "max_tokens": 4096}, timeout=90)
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-def call_cerebras_chat(api_key, model, messages, temp=0.4):
-    if not api_key:
-        return "⚠️ CEREBRAS_API_KEY set nahi hai."
-    url = "https://api.cerebras.ai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    full = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
-    resp = requests.post(url, headers=headers, json={"model": model, "messages": full, "temperature": temp, "max_tokens": 4096}, timeout=90)
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-def call_mistral_chat(api_key, model, messages, temp=0.4):
-    if not api_key:
-        return "⚠️ MISTRAL_API_KEY set nahi hai."
-    url = "https://api.mistral.ai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     full = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
     resp = requests.post(url, headers=headers, json={"model": model, "messages": full, "temperature": temp, "max_tokens": 4096}, timeout=90)
@@ -1337,30 +484,42 @@ def call_pollinations_chat(messages, temp=0.4):
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
 
+def call_together_chat(api_key, model, messages, temp=0.4):
+    if not api_key:
+        return "⚠️ TOGETHER_API_KEY set nahi hai. Together AI se free key lo."
+    url = "https://api.together.xyz/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    full = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+    resp = requests.post(url, headers=headers, json={"model": model, "messages": full, "temperature": temp, "max_tokens": 4096}, timeout=90)
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"]
+
+def call_huggingface_chat(api_key, model, messages, temp=0.4):
+    if not api_key:
+        return "⚠️ HF_API_KEY set nahi hai. huggingface.co se free token lo."
+    try:
+        client = InferenceClient(api_key=api_key)
+        chat_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+        response = client.chat_completion(
+            model=model,
+            messages=chat_messages,
+            temperature=temp,
+            max_tokens=4096,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Error: {e}"
+
+# --- IMAGE APIS ---
 def run_with_progress(work_fn, estimate_seconds=15, label="Generating"):
-    """Runs work_fn() in a background thread and shows a live % progress
-    bar in the main thread while it waits — instead of a plain spinner.
-
-    IMPORTANT: work_fn is called exactly ONCE, in the background thread.
-    This wrapper never re-calls or retries the API — it only visualizes
-    the wait for the single call already happening, so it costs nothing
-    extra against today's free-plan quota.
-
-    The % shown is an estimate (real progress isn't reported by the API),
-    so it eases toward ~92% on a curve tuned by estimate_seconds and only
-    jumps to 100% once the real result actually comes back.
-    """
     result_holder = {}
-
     def _runner():
         try:
             result_holder["value"] = work_fn()
         except Exception as e:
             result_holder["error"] = e
-
     thread = threading.Thread(target=_runner, daemon=True)
     thread.start()
-
     bar = st.progress(0, text=f"✦ {label}… 0%")
     start = time.time()
     while thread.is_alive():
@@ -1373,19 +532,19 @@ def run_with_progress(work_fn, estimate_seconds=15, label="Generating"):
     bar.progress(100, text=f"✦ {label}… 100%")
     time.sleep(0.25)
     bar.empty()
-
     if "error" in result_holder:
         raise result_holder["error"]
     return result_holder.get("value")
 
+def get_image_url_pollinations(prompt, ratio="9:16"):
+    width, height = (768, 1365) if ratio == "9:16" else (1365, 768)
+    return f"https://image.pollinations.ai/prompt/{quote(prompt)}?width={width}&height={height}&model=flux&enhance=true&nologo=true"
 
-def call_agnes_image(prompt, ratio="9:16", api_key=None):
-    if api_key is None:
-        api_key = AGNES_API_KEY
-    if not api_key:
+def call_agnes_image(prompt, ratio="9:16"):
+    if not AGNES_API_KEY:
         return None, "⚠️ AGNES_API_KEY set nahi hai."
     url = "https://apihub.agnes-ai.com/v1/images/generations"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {AGNES_API_KEY}", "Content-Type": "application/json"}
     size = "768x1365" if ratio == "9:16" else "1365x768"
     payload = {"model": "agnes-image-2.1-flash", "prompt": prompt, "n": 1, "size": size}
     try:
@@ -1396,12 +555,24 @@ def call_agnes_image(prompt, ratio="9:16", api_key=None):
     except Exception as e:
         return None, f"Error: {e}"
 
-def call_agnes_video(prompt, ratio="9:16", api_key=None):
-    if api_key is None:
-        api_key = AGNES_API_KEY
-    if not api_key:
+def call_huggingface_image(prompt, model_id, ratio="9:16"):
+    if not HF_API_KEY:
+        return None, "⚠️ HF_API_KEY set nahi hai."
+    width, height = (768, 1360) if ratio == "9:16" else (1360, 768)
+    try:
+        client = InferenceClient(provider="fal-ai", api_key=HF_API_KEY)
+        image = client.text_to_image(prompt, model=model_id, width=width, height=height)
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        return buf.getvalue(), None
+    except Exception as e:
+        return None, f"Error: {e}"
+
+# --- VIDEO APIS ---
+def call_agnes_video(prompt, ratio="9:16"):
+    if not AGNES_API_KEY:
         return None, "⚠️ AGNES_API_KEY set nahi hai."
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {AGNES_API_KEY}", "Content-Type": "application/json"}
     width, height = (720, 1280) if ratio == "9:16" else (1280, 720)
     payload = {
         "model": "agnes-video-v2.0",
@@ -1412,8 +583,6 @@ def call_agnes_video(prompt, ratio="9:16", api_key=None):
         "frame_rate": 24,
     }
     try:
-        # Step 1: create the video task (this endpoint only returns task info,
-        # not the finished video)
         create_resp = requests.post(
             "https://apihub.agnes-ai.com/v1/videos",
             headers=headers, json=payload, timeout=60,
@@ -1423,8 +592,6 @@ def call_agnes_video(prompt, ratio="9:16", api_key=None):
         video_id = task.get("video_id") or task.get("task_id") or task.get("id")
         if not video_id:
             return None, f"Error: video_id nahi mila. Response: {task}"
-
-        # Step 2: poll for the result until it's completed or fails
         poll_url = f"https://apihub.agnes-ai.com/agnesapi?video_id={video_id}"
         max_wait_seconds = 280
         poll_interval = 5
@@ -1444,9 +611,74 @@ def call_agnes_video(prompt, ratio="9:16", api_key=None):
             elif status == "failed":
                 err_info = result.get("error") or "unknown error"
                 return None, f"Error: video generation fail hua — {err_info}"
-            # else: still queued / in_progress, keep polling
+        return None, "Error: video generate hone me bahut time lag raha hai (timeout)."
+    except Exception as e:
+        return None, f"Error: {e}"
 
-        return None, "Error: video generate hone me bahut time lag raha hai (timeout). Baad me try karo."
+def call_huggingface_video(prompt, model_id, ratio="9:16"):
+    if not HF_API_KEY:
+        return None, "⚠️ HF_API_KEY set nahi hai."
+    try:
+        # Try using Replicate provider
+        client = InferenceClient(provider="replicate", api_key=HF_API_KEY)
+        result = client.text_to_video(prompt, model=model_id)
+        return result, None
+    except Exception as e:
+        # Fallback - try fal-ai
+        try:
+            client = InferenceClient(provider="fal-ai", api_key=HF_API_KEY)
+            result = client.text_to_video(prompt, model=model_id)
+            return result, None
+        except Exception as e2:
+            return None, f"Error: {e2}"
+
+# --- MUSIC APIS ---
+def call_huggingface_music(prompt, model_id):
+    if not HF_API_KEY:
+        return None, "⚠️ HF_API_KEY set nahi hai."
+    try:
+        client = InferenceClient(api_key=HF_API_KEY)
+        audio = client.text_to_audio(prompt, model=model_id)
+        return audio, None
+    except Exception as e:
+        return None, f"Error: {e}"
+
+def call_musicapi_music(prompt):
+    if not MUSICAPI_KEY:
+        return None, "⚠️ MUSICAPI_KEY set nahi hai."
+    headers = {"Authorization": f"Bearer {MUSICAPI_KEY}", "Content-Type": "application/json"}
+    create_payload = {
+        "custom_mode": False,
+        "mv": "sonic-v4-5",
+        "title": (prompt[:60] or "Dost AI Song"),
+        "tags": "pop",
+        "gpt_description_prompt": prompt,
+        "make_instrumental": False,
+    }
+    try:
+        resp = requests.post(
+            "https://api.musicapi.ai/api/v1/sonic/create",
+            headers=headers, json=create_payload, timeout=60,
+        )
+        resp.raise_for_status()
+        task_id = resp.json().get("task_id")
+        if not task_id:
+            return None, f"Error: task_id nahi mila. Response: {resp.text[:300]}"
+        poll_url = f"https://api.musicapi.ai/api/v1/sonic/task/{task_id}"
+        for _ in range(40):
+            time.sleep(6)
+            poll_resp = requests.get(poll_url, headers=headers, timeout=30)
+            poll_resp.raise_for_status()
+            result = poll_resp.json()
+            state = result.get("state") or result.get("status")
+            if state == "succeeded":
+                items = result.get("data") or []
+                if items and items[0].get("audio_url"):
+                    return items[0]["audio_url"], None
+                return None, f"Error: song ready hua par audio_url nahi mila. Response: {result}"
+            if state == "failed":
+                return None, f"Error: MusicAPI generation fail hua — {result}"
+        return None, "Error: music generate hone me bahut time lag raha hai (timeout)."
     except Exception as e:
         return None, f"Error: {e}"
 
@@ -1454,18 +686,11 @@ def call_minimax_music(prompt):
     api_key = get_secret("MINIMAX_API_KEY")
     if not api_key:
         return None, "⚠️ MINIMAX_API_KEY set nahi hai."
-    # Correct MiniMax host + path (old code used the wrong domain
-    # "api.minimaxi.chat" and the wrong path "/v1/music/generate",
-    # which is why it was 404ing). Official endpoint per MiniMax docs:
-    # https://platform.minimax.io/docs/api-reference/music-generation
     url = "https://api.minimax.io/v1/music_generation"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {
         "model": "music-2.6",
         "prompt": prompt,
-        # UI only takes one free-text "describe your song" box, so we
-        # let MiniMax auto-write matching lyrics instead of requiring
-        # the user to type them separately.
         "lyrics_optimizer": True,
         "is_instrumental": False,
         "stream": False,
@@ -1484,75 +709,10 @@ def call_minimax_music(prompt):
         if not audio_url:
             return None, f"Error: audio_url nahi mila. Response: {data}"
         return audio_url, None
-    except requests.exceptions.HTTPError as e:
-        # Surface MiniMax's own error body (e.g. quota / auth issues)
-        # instead of just the generic requests exception text.
-        detail = ""
-        try:
-            detail = f" — {resp.json()}"
-        except Exception:
-            detail = f" — {resp.text[:300]}"
-        return None, f"Error: {e}{detail}"
     except Exception as e:
         return None, f"Error: {e}"
 
-def call_musicapi_music(prompt):
-    """MusicAPI.ai (Sonic model) — free-trial-credit music generation.
-    Docs: https://docs.musicapi.ai/introduction
-    Signup gives 75 free credits, no card required; after that it's
-    pay-as-you-go. Flow is async: POST creates a task, then we poll
-    the task endpoint until it's ready.
-    """
-    api_key = get_secret("MUSICAPI_KEY")
-    if not api_key:
-        return None, "⚠️ MUSICAPI_KEY set nahi hai. https://musicapi.ai pe free signup karke key le lo."
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    create_payload = {
-        "custom_mode": False,
-        "mv": "sonic-v4-5",
-        "title": (prompt[:60] or "Dost AI Song"),
-        "tags": "pop",
-        "gpt_description_prompt": prompt,
-        "make_instrumental": False,
-    }
-    try:
-        resp = requests.post(
-            "https://api.musicapi.ai/api/v1/sonic/create",
-            headers=headers, json=create_payload, timeout=60,
-        )
-        resp.raise_for_status()
-        task_id = resp.json().get("task_id")
-        if not task_id:
-            return None, f"Error: task_id nahi mila. Response: {resp.text[:300]}"
-
-        # Poll until the song is ready (or fails / times out)
-        poll_url = f"https://api.musicapi.ai/api/v1/sonic/task/{task_id}"
-        for _ in range(40):  # ~40 * 6s = 4 min max
-            time.sleep(6)
-            poll_resp = requests.get(poll_url, headers=headers, timeout=30)
-            poll_resp.raise_for_status()
-            result = poll_resp.json()
-            state = result.get("state") or result.get("status")
-            if state == "succeeded":
-                items = result.get("data") or []
-                if items and items[0].get("audio_url"):
-                    return items[0]["audio_url"], None
-                return None, f"Error: song ready hua par audio_url nahi mila. Response: {result}"
-            if state == "failed":
-                return None, f"Error: MusicAPI generation fail hua — {result}"
-            # else: still queued/processing, keep polling
-
-        return None, "Error: music generate hone me bahut time lag raha hai (timeout). Baad me try karo."
-    except requests.exceptions.HTTPError as e:
-        detail = ""
-        try:
-            detail = f" — {resp.json()}"
-        except Exception:
-            pass
-        return None, f"Error: {e}{detail}"
-    except Exception as e:
-        return None, f"Error: {e}"
-
+# --- TRANSLATE ---
 def call_libretranslate(text, source="auto", target="en"):
     try:
         resp = requests.post("https://translate.terraprint.co/translate", 
@@ -1562,89 +722,37 @@ def call_libretranslate(text, source="auto", target="en"):
     except Exception as e:
         return None, f"Translation error: {e}"
 
-def get_image_url_pollinations(prompt, ratio="9:16"):
-    width, height = (768, 1365) if ratio == "9:16" else (1365, 768)
-    return f"https://image.pollinations.ai/prompt/{quote(prompt)}?width={width}&height={height}&model=flux&enhance=true&nologo=true"
-
 # ============================================================
-# NEW: Hugging Face API functions (FREE MODELS ADDED)
+# HIGH QUALITY PROMPTS
 # ============================================================
+HIGH_QUALITY_PROMPTS = [
+    "beautiful anime girl with long flowing silver hair wearing elegant kimono with cherry blossom pattern standing in japanese garden soft morning light 8k ultra detailed portrait masterpiece studio ghibli style cinematic",
+    "powerful samurai warrior in full armor holding katana dramatic sunset sky mountain background 8k ultra detailed portrait epic cinematic japanese art style",
+    "magical girl with glowing crystal powers floating in neon cyberpunk city vibrant purple pink lights 8k ultra detailed portrait anime style futuristic",
+    "ethereal fairy with translucent wings sitting on glowing mushroom in enchanted forest magical sparkles 8k ultra detailed portrait fantasy art dreamy",
+    "dragon flying above ancient japanese castle full moon night cherry blossoms falling 8k ultra detailed portrait epic fantasy masterpiece dramatic",
+]
 
-def call_huggingface_image(prompt, ratio="9:16", api_key=None):
-    """Hugging Face image generation via Inference API"""
-    if api_key is None:
-        api_key = HF_API_KEY
-    if not api_key:
-        return None, "⚠️ HF_API_KEY set nahi hai. huggingface.co/settings/tokens se free token banao."
+def render_creativity_footer():
+    selected_prompts = random.sample(HIGH_QUALITY_PROMPTS, min(5, len(HIGH_QUALITY_PROMPTS)))
+    items_html = ""
+    for prompt in selected_prompts:
+        img_url = f"https://image.pollinations.ai/prompt/{quote(prompt)}?width=600&height=1067&model=flux&enhance=true&nologo=true"
+        caption = prompt[:25] + "..." if len(prompt) > 25 else prompt
+        items_html += f"""<div style='flex:0 0 auto;width:200px;border-radius:12px;overflow:hidden;border:1px solid #e8eaed;background:#f8f9fa;'>
+            <img src='{img_url}' width='200' height='355' style='width:100%;height:355px;object-fit:cover;display:block;'>
+            <div style='padding:6px 10px;font-size:9px;color:#5f6368;text-align:center;background:#f1f3f4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>🎨 {caption}</div>
+        </div>"""
     
-    width, height = (768, 1360) if ratio == "9:16" else (1360, 768)
-    model = "black-forest-labs/FLUX.1-schnell"
-    
-    try:
-        from huggingface_hub import InferenceClient
-        client = InferenceClient(provider="fal-ai", api_key=api_key)
-        image = client.text_to_image(prompt, model=model, width=width, height=height)
-        import io
-        buf = io.BytesIO()
-        image.save(buf, format="PNG")
-        return buf.getvalue(), None
-    except Exception as e:
-        return None, f"Error: {e}"
-
-def call_huggingface_video(prompt, ratio="9:16", api_key=None):
-    """Hugging Face video generation - uses Replicate provider"""
-    if api_key is None:
-        api_key = HF_API_KEY
-    if not api_key:
-        return None, "⚠️ HF_API_KEY set nahi hai."
-    
-    try:
-        from huggingface_hub import InferenceClient
-        client = InferenceClient(provider="replicate", api_key=api_key)
-        # CogVideoX model
-        result = client.text_to_video(prompt, model="THUDM/CogVideoX-5b")
-        return result, None
-    except Exception as e:
-        return None, f"Error: {e}"
-
-def call_huggingface_music(prompt, api_key=None):
-    """Hugging Face music generation via Inference API"""
-    if api_key is None:
-        api_key = HF_API_KEY
-    if not api_key:
-        return None, "⚠️ HF_API_KEY set nahi hai."
-    
-    try:
-        from huggingface_hub import InferenceClient
-        client = InferenceClient(api_key=api_key)
-        audio = client.text_to_audio(prompt, model="facebook/musicgen-large")
-        return audio, None
-    except Exception as e:
-        return None, f"Error: {e}"
-
-# ============================================================
-# MODEL POPOVER - SAME AS ORIGINAL
-# ============================================================
-def render_model_popover():
-    current_info = get_model_info(st.session_state.selected_chat_model)
-    with st.popover(f"{current_info['icon']} {current_info['label']} ▼", use_container_width=False):
-        st.markdown("<div class='model-section-label free'>⚡ Free Models</div>", unsafe_allow_html=True)
-        for mid, info in MODEL_TIERS["free"]["models"].items():
-            selected = mid == st.session_state.selected_chat_model
-            if st.button(f"{'✓ ' if selected else ''}{info['icon']} {info['label']}", key=f"model_{mid}", use_container_width=True):
-                st.session_state.selected_chat_model = mid
-                st.rerun()
-            st.caption(info["desc"])
-        
-        st.markdown("<div class='model-section-label pro'>🔒 Pro Models</div>", unsafe_allow_html=True)
-        for mid, info in MODEL_TIERS["pro"]["models"].items():
-            unlocked = bool(get_secret(info.get("secret_name", "")))
-            selected = mid == st.session_state.selected_chat_model
-            lock = "" if unlocked else "🔒 "
-            if st.button(f"{'✓ ' if selected else ''}{lock}{info['icon']} {info['label']}", key=f"model_pro_{mid}", use_container_width=True, disabled=not unlocked):
-                st.session_state.selected_chat_model = mid
-                st.rerun()
-            st.caption(info["desc"] if unlocked else f"🔑 {info['secret_name']}")
+    st.markdown(f"""
+    <div style='margin-top:24px;padding:18px 0 12px 0;border-top:1px solid #e8eaed;text-align:center;'>
+        <h2 style='font-size:24px;font-weight:700;background:linear-gradient(135deg,#4285f4,#9b72cb,#d96570);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px;'>✨ Our Unique Creativity</h2>
+        <p style='color:#5f6368;font-size:13px;margin-bottom:12px;'>4K Quality • 9:16 Ratio</p>
+        <div style='display:flex;gap:20px;overflow-x:auto;padding:6px 0;'>
+            {items_html}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ============================================================
 # HEADER
@@ -1660,7 +768,6 @@ st.markdown(f"""
                     <stop offset="100%" stop-color="#d96570"/>
                 </linearGradient>
             </defs>
-            <!-- "Dost AI" mark: two friends (overlapping circles) + an AI spark -->
             <circle cx="32" cy="32" r="30" fill="url(#dostLogoBg)"/>
             <circle cx="24" cy="35" r="14" fill="white" opacity="0.95"/>
             <circle cx="40" cy="35" r="14" fill="white" opacity="0.55"/>
@@ -1688,6 +795,7 @@ with st.sidebar:
         ("🎬 Video", "video"),
         ("🎵 Music", "music"),
         ("📸 Gallery", "gallery"),
+        ("🌐 Translate", "translate"),
     ]
     for label, key in tabs:
         if st.button(label, key=f"nav_{key}", use_container_width=True, 
@@ -1708,10 +816,12 @@ with st.sidebar:
     with st.popover("⚙️  Settings", use_container_width=True):
         st.caption(f"💬 Chat free limit: {FREE_MSG_LIMIT_PER_DAY}/day")
         st.caption(f"🪙 Tokens today: {_tokens_left}/{TOKEN_LIMIT_PER_DAY} left")
-        st.caption(f"🖼️ Image = {IMAGE_TOKEN_COST} tokens · 🎬 Video = {VIDEO_TOKEN_COST} tokens")
-        st.caption("🔐 Keys in `.streamlit/secrets.toml`")
+        st.caption(f"🖼️ Image = {IMAGE_TOKEN_COST} tokens")
+        st.caption(f"🎬 Video = {VIDEO_TOKEN_COST} tokens")
+        st.caption(f"🎵 Music = {MUSIC_TOKEN_COST} tokens")
+        st.caption("🔑 Keys in `.streamlit/secrets.toml`")
 
-    st.progress(min(1.0, _tokens_left / TOKEN_LIMIT_PER_DAY), text=f"🪙 {_tokens_left}/{TOKEN_LIMIT_PER_DAY} tokens left today")
+    st.progress(min(1.0, _tokens_left / TOKEN_LIMIT_PER_DAY), text=f"🪙 {_tokens_left}/{TOKEN_LIMIT_PER_DAY} tokens left")
 
     _avatar_html = (
         f"<img src='{USER_PICTURE}' style='width:30px;height:30px;border-radius:50%;object-fit:cover;'/>"
@@ -1734,7 +844,7 @@ with st.sidebar:
         st.logout()
 
 # ============================================================
-# CHAT TAB - SAME AS ORIGINAL
+# 💬 CHAT TAB
 # ============================================================
 if st.session_state.active_tab == "chat":
     current_chat = st.session_state.chats[st.session_state.current_chat_id]
@@ -1756,20 +866,28 @@ if st.session_state.active_tab == "chat":
     client_ip = get_client_ip()
     limit_hit = get_today_count(client_ip) >= FREE_MSG_LIMIT_PER_DAY
     
+    # Model selector
+    with st.popover("⚡ Model Select ▼", use_container_width=False):
+        st.markdown("<div class='model-section-label free'>🚀 Free Chat Models</div>", unsafe_allow_html=True)
+        for mid, info in CHAT_MODELS.items():
+            selected = mid == st.session_state.selected_chat_model
+            if st.button(f"{'✓ ' if selected else ''}{info['icon']} {info['label']}", key=f"model_{mid}", use_container_width=True):
+                st.session_state.selected_chat_model = mid
+                st.rerun()
+            # Show if key is required
+            req_key = ""
+            if info["provider"] == "groq" and not GROQ_API_KEY:
+                req_key = " 🔑 Groq key"
+            elif info["provider"] == "together" and not TOGETHER_API_KEY:
+                req_key = " 🔑 Together key"
+            elif info["provider"] == "huggingface_chat" and not HF_API_KEY:
+                req_key = " 🔑 HF key"
+            st.caption(info.get("desc", "") + req_key)
+    
     if limit_hit:
         st.warning(f"Today's limit reached ({FREE_MSG_LIMIT_PER_DAY})")
         user_input = None
     else:
-        # Model selector — single popover trigger, styled as a flat pill
-        # and right-aligned via CSS (previously a decorative chip sat on
-        # top of the real popover button, showing two boxes for one
-        # control — removed, see .main-glass .stPopover CSS).
-        render_model_popover()
-        
-        # Chat input — using a normal form (NOT st.chat_input) so it renders
-        # exactly here, inline, above the gallery. st.form has always
-        # supported key=, unlike st.container(key=...) which needs a newer
-        # Streamlit version, so this works everywhere.
         with st.form(key="chat_input_form", clear_on_submit=True):
             col_text, col_btn = st.columns([12, 1])
             with col_text:
@@ -1795,16 +913,18 @@ if st.session_state.active_tab == "chat":
             with st.spinner("Thinking..."):
                 try:
                     api_messages = [{"role": m["role"], "content": m["content"]} for m in current_chat["messages"]]
-                    info = get_model_info(st.session_state.selected_chat_model)
+                    info = CHAT_MODELS[st.session_state.selected_chat_model]
+                    provider = info.get("provider")
+                    model_id = info.get("model_id")
                     
-                    if info.get("provider") == "groq":
-                        reply = call_groq_chat(GROQ_API_KEY, info["model_id"], api_messages, TEMPERATURE)
-                    elif info.get("provider") == "cerebras":
-                        reply = call_cerebras_chat(CEREBRAS_API_KEY, info["model_id"], api_messages, TEMPERATURE)
-                    elif info.get("provider") == "mistral":
-                        reply = call_mistral_chat(MISTRAL_API_KEY, info["model_id"], api_messages, TEMPERATURE)
-                    elif info.get("provider") == "pollinations":
+                    if provider == "groq":
+                        reply = call_groq_chat(GROQ_API_KEY, model_id, api_messages, TEMPERATURE)
+                    elif provider == "pollinations":
                         reply = call_pollinations_chat(api_messages, TEMPERATURE)
+                    elif provider == "together":
+                        reply = call_together_chat(TOGETHER_API_KEY, model_id, api_messages, TEMPERATURE)
+                    elif provider == "huggingface_chat":
+                        reply = call_huggingface_chat(HF_API_KEY, model_id, api_messages, TEMPERATURE)
                     else:
                         reply = "⚠️ Model not configured yet."
                     
@@ -1814,15 +934,14 @@ if st.session_state.active_tab == "chat":
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {e}")
-                    st.caption("Reply generate nahi hui. Upar wala error padho — zyada tar wajah galat/expired API key hoti hai.")
     
     render_creativity_footer()
 
 # ============================================================
-# IMAGE TAB - SAME BUT WITH NEW HUGGING FACE MODEL
+# 🖼️ IMAGE TAB
 # ============================================================
 if st.session_state.active_tab == "image":
-    st.markdown("<div class='hero-text'><h1>AI Image Studio</h1><p>9:16 Ratio • High Quality</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-text'><h1>AI Image Studio</h1><p>13 Free Models • 9:16 Ratio</p></div>", unsafe_allow_html=True)
 
     with st.container(key="img_studio_card"):
         img_prompt = st.text_area("Describe your image",
@@ -1831,10 +950,10 @@ if st.session_state.active_tab == "image":
                                  label_visibility="collapsed",
                                  key="img_prompt_input")
 
-        col1, col2, col3 = st.columns([1.6, 1, 1.3])
+        col1, col2, col3 = st.columns([2, 1, 1.5])
         with col1:
             img_model = st.selectbox("Model", list(IMAGE_MODELS.keys()),
-                                    format_func=lambda x: IMAGE_MODELS[x]["label"],
+                                    format_func=lambda x: f"{IMAGE_MODELS[x]['icon']} {IMAGE_MODELS[x]['label']}",
                                     key="img_model_select",
                                     label_visibility="collapsed")
         with col2:
@@ -1850,47 +969,56 @@ if st.session_state.active_tab == "image":
         if not img_prompt.strip():
             st.warning("Pehle prompt likho.")
         elif get_tokens_remaining(USER_EMAIL) < IMAGE_TOKEN_COST:
-            st.error(f"❌ Aaj ke free tokens khatam ho gaye. Image ke liye {IMAGE_TOKEN_COST} tokens chahiye, sirf {get_tokens_remaining(USER_EMAIL)} bache hain. Kal 12 baje ke baad wapas try karo.")
+            st.error(f"❌ Aaj ke free tokens khatam ho gaye. Image ke liye {IMAGE_TOKEN_COST} tokens chahiye, sirf {get_tokens_remaining(USER_EMAIL)} bache hain.")
         else:
-            if img_model == "pollinations":
+            info = IMAGE_MODELS[img_model]
+            provider = info.get("provider")
+            
+            if provider == "pollinations":
                 img_url = run_with_progress(
                     lambda: get_image_url_pollinations(img_prompt, img_ratio),
                     estimate_seconds=8, label="Image ban raha hai")
                 deduct_tokens(USER_EMAIL, IMAGE_TOKEN_COST)
                 st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                st.image(img_url, caption=img_prompt, use_container_width=True)
+                st.image(img_url, caption=f"{info['label']}: {img_prompt}", use_container_width=True)
                 st.session_state.gallery.insert(0, {"url": img_url, "prompt": img_prompt, "type": "image"})
-            elif img_model == "agnes":
+                
+            elif provider == "agnes":
                 img_url, err = run_with_progress(
-                    lambda: call_agnes_image(img_prompt, img_ratio, AGNES_API_KEY),
+                    lambda: call_agnes_image(img_prompt, img_ratio),
                     estimate_seconds=15, label="Image ban raha hai")
                 if err:
                     st.error(err)
                 else:
                     deduct_tokens(USER_EMAIL, IMAGE_TOKEN_COST)
                     st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                    st.image(img_url, caption=img_prompt, use_container_width=True)
+                    st.image(img_url, caption=f"{info['label']}: {img_prompt}", use_container_width=True)
                     st.session_state.gallery.insert(0, {"url": img_url, "prompt": img_prompt, "type": "image"})
-            elif img_model == "huggingface":  # NEW: Hugging Face model
+                    
+            elif provider == "huggingface":
+                model_id = info.get("model")
                 img_bytes, err = run_with_progress(
-                    lambda: call_huggingface_image(img_prompt, img_ratio, HF_API_KEY),
+                    lambda: call_huggingface_image(img_prompt, model_id, img_ratio),
                     estimate_seconds=20, label="Image ban raha hai")
                 if err:
                     st.error(err)
                 else:
                     deduct_tokens(USER_EMAIL, IMAGE_TOKEN_COST)
                     st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                    st.image(img_bytes, caption=f"FLUX: {img_prompt}", use_container_width=True)
-                    # Store in gallery as base64
-                    st.session_state.gallery.insert(0, {"url": "data:image/png;base64," + base64.b64encode(img_bytes).decode(), "prompt": img_prompt, "type": "image"})
+                    st.image(img_bytes, caption=f"{info['label']}: {img_prompt}", use_container_width=True)
+                    st.session_state.gallery.insert(0, {
+                        "url": "data:image/png;base64," + base64.b64encode(img_bytes).decode(), 
+                        "prompt": img_prompt, 
+                        "type": "image"
+                    })
 
     render_creativity_footer()
 
 # ============================================================
-# VIDEO TAB - SAME BUT WITH NEW HUGGING FACE MODEL
+# 🎬 VIDEO TAB
 # ============================================================
 if st.session_state.active_tab == "video":
-    st.markdown("<div class='hero-text'><h1>AI Video Studio</h1><p>Agnes AI — Free</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-text'><h1>AI Video Studio</h1><p>7 Free Models</p></div>", unsafe_allow_html=True)
 
     with st.container(key="vid_studio_card"):
         vid_prompt = st.text_area("Describe your video",
@@ -1899,13 +1027,18 @@ if st.session_state.active_tab == "video":
                                  label_visibility="collapsed",
                                  key="vid_prompt_input")
 
-        col1, col2 = st.columns([1, 1.3])
+        col1, col2, col3 = st.columns([2, 1, 1.5])
         with col1:
+            vid_model = st.selectbox("Model", list(VIDEO_MODELS.keys()),
+                                    format_func=lambda x: f"{VIDEO_MODELS[x]['icon']} {VIDEO_MODELS[x]['label']}",
+                                    key="vid_model_select",
+                                    label_visibility="collapsed")
+        with col2:
             vid_ratio = st.selectbox("Ratio", ["9:16", "16:9"],
                                     format_func=lambda x: f"▢ {x} HD",
                                     key="vid_ratio_select",
                                     label_visibility="collapsed")
-        with col2:
+        with col3:
             gen_vid_clicked = st.button("✦ Generate Video", key="gen_video_btn", use_container_width=True)
         st.caption(f"🪙 {VIDEO_TOKEN_COST} tokens/video · {get_tokens_remaining(USER_EMAIL)} left today")
 
@@ -1913,34 +1046,54 @@ if st.session_state.active_tab == "video":
         if not vid_prompt.strip():
             st.warning("Pehle prompt likho.")
         elif get_tokens_remaining(USER_EMAIL) < VIDEO_TOKEN_COST:
-            st.error(f"❌ Aaj ke free tokens khatam ho gaye. Video ke liye {VIDEO_TOKEN_COST} tokens chahiye, sirf {get_tokens_remaining(USER_EMAIL)} bache hain. Kal 12 baje ke baad wapas try karo.")
+            st.error(f"❌ Aaj ke free tokens khatam ho gaye. Video ke liye {VIDEO_TOKEN_COST} tokens chahiye, sirf {get_tokens_remaining(USER_EMAIL)} bache hain.")
         else:
-            vid_url, err = run_with_progress(
-                lambda: call_agnes_video(vid_prompt, vid_ratio, AGNES_API_KEY),
-                estimate_seconds=55, label="Video ban raha hai")
-            if err:
-                st.error(err)
-            else:
-                deduct_tokens(USER_EMAIL, VIDEO_TOKEN_COST)
-                st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                st.video(vid_url)
-                st.caption(f"🎬 {vid_prompt}")
+            info = VIDEO_MODELS[vid_model]
+            provider = info.get("provider")
+            
+            if provider == "agnes":
+                vid_url, err = run_with_progress(
+                    lambda: call_agnes_video(vid_prompt, vid_ratio),
+                    estimate_seconds=55, label="Video ban raha hai")
+                if err:
+                    st.error(err)
+                else:
+                    deduct_tokens(USER_EMAIL, VIDEO_TOKEN_COST)
+                    st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
+                    st.video(vid_url)
+                    st.caption(f"🎬 {info['label']}: {vid_prompt}")
+                    
+            elif provider == "huggingface_video":
+                model_id = info.get("model")
+                vid_url, err = run_with_progress(
+                    lambda: call_huggingface_video(vid_prompt, model_id, vid_ratio),
+                    estimate_seconds=90, label="Video ban raha hai")
+                if err:
+                    st.error(err)
+                else:
+                    if vid_url:
+                        deduct_tokens(USER_EMAIL, VIDEO_TOKEN_COST)
+                        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
+                        st.video(vid_url)
+                        st.caption(f"🎬 {info['label']}: {vid_prompt}")
+                    else:
+                        st.warning("⚠️ Video generation ke liye Replicate API key chahiye. Agnes use karein.")
 
     render_creativity_footer()
 
 # ============================================================
-# MUSIC TAB - SAME BUT WITH NEW HUGGING FACE MODEL
+# 🎵 MUSIC TAB
 # ============================================================
 if st.session_state.active_tab == "music":
-    st.markdown("<div class='hero-text'><h1>AI Music Studio</h1><p>MiniMax ya MusicAPI se banao</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-text'><h1>AI Music Studio</h1><p>4 Free Models</p></div>", unsafe_allow_html=True)
     
     song_prompt = st.text_area("Describe your song", 
-                              placeholder="Jaise: uplifting Hindi devotional", 
+                              placeholder="Jaise: uplifting Hindi devotional or lo-fi beat",
                               height=60, 
                               label_visibility="collapsed",
                               key="song_prompt_input")
 
-    col_model, col_btn = st.columns([1, 2])
+    col_model, col_btn = st.columns([2, 1.5])
     with col_model:
         music_model = st.selectbox("Model", list(MUSIC_MODELS.keys()),
                                   format_func=lambda x: f"{MUSIC_MODELS[x]['icon']} {MUSIC_MODELS[x]['label']}",
@@ -1953,37 +1106,72 @@ if st.session_state.active_tab == "music":
         if not song_prompt.strip():
             st.warning("Pehle description likho.")
         else:
-            if music_model == "musicapi":
-                spinner_label = "MusicAPI se song ban raha hai (1-2 min lag sakte hain)..."
-                with st.spinner(spinner_label):
+            info = MUSIC_MODELS[music_model]
+            provider = info.get("provider")
+            
+            with st.spinner("Music generate ho raha hai..."):
+                if provider == "huggingface_music":
+                    model_id = info.get("model")
+                    audio_data, err = call_huggingface_music(song_prompt, model_id)
+                    if err:
+                        st.error(err)
+                    else:
+                        st.audio(audio_data, format="audio/wav")
+                        st.caption(f"🎵 {info['label']}: {song_prompt}")
+                        
+                elif provider == "musicapi":
                     audio_url, err = call_musicapi_music(song_prompt)
                     if err:
                         st.error(err)
                     else:
                         st.audio(audio_url, format="audio/mp3")
-                        st.caption(f"🎵 {song_prompt}")
-            elif music_model == "huggingface":  # NEW: Hugging Face MusicGen
-                with st.spinner("MusicGen se song ban raha hai..."):
-                    audio_data, err = call_huggingface_music(song_prompt, HF_API_KEY)
-                    if err:
-                        st.error(err)
-                    else:
-                        st.audio(audio_data, format="audio/wav")
-                        st.caption(f"🎵 {song_prompt}")
-            else:
-                # MiniMax
-                with st.spinner("Generating music..."):
+                        st.caption(f"🎵 {info['label']}: {song_prompt}")
+                        
+                elif provider == "minimax":
                     audio_url, err = call_minimax_music(song_prompt)
                     if err:
                         st.error(err)
                     else:
                         st.audio(audio_url, format="audio/mp3")
-                        st.caption(f"🎵 {song_prompt}")
+                        st.caption(f"🎵 {info['label']}: {song_prompt}")
     
     render_creativity_footer()
 
 # ============================================================
-# GALLERY TAB - SAME AS ORIGINAL
+# 🌐 TRANSLATE TAB
+# ============================================================
+if st.session_state.active_tab == "translate":
+    st.markdown("<div class='hero-text'><h1>Free Translate</h1><p>LibreTranslate</p></div>", unsafe_allow_html=True)
+    
+    LANGS = {"Auto": "auto", "Hindi": "hi", "English": "en", "Marathi": "mr", 
+             "Gujarati": "gu", "Tamil": "ta", "Telugu": "te", "Bengali": "bn", 
+             "Spanish": "es", "French": "fr", "Arabic": "ar", "Japanese": "ja",
+             "German": "de", "Italian": "it", "Portuguese": "pt", "Russian": "ru"}
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        src = st.selectbox("Source", list(LANGS.keys()), index=0, key="src_lang")
+    with col2:
+        tgt = st.selectbox("Target", list(LANGS.keys()), index=2, key="tgt_lang")
+    
+    text = st.text_area("Text", height=80, placeholder="Yahan text likho...", label_visibility="collapsed", key="translate_text")
+    
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+    with col_btn2:
+        if st.button("✦ Translate", key="gen_translate_btn", use_container_width=True):
+            if not text.strip():
+                st.warning("Pehle text likho.")
+            else:
+                translated, err = call_libretranslate(text.strip(), LANGS[src], LANGS[tgt])
+                if err:
+                    st.error(err)
+                else:
+                    st.text_area("Translation", value=translated, height=80, disabled=True, key="translated_output")
+    
+    render_creativity_footer()
+
+# ============================================================
+# 📸 GALLERY TAB
 # ============================================================
 if st.session_state.active_tab == "gallery":
     st.markdown("<div class='hero-text'><h1>Your Gallery</h1><p>All creations</p></div>", unsafe_allow_html=True)
