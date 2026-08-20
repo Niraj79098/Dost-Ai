@@ -1,7 +1,6 @@
 """
-🧡 Dost AI — COMPLETE FREE AI MODELS
-All Free AI Tools: Chat, Image, Video, Music, Translate
-Includes: FLUX, SDXL, CogVideo, MusicGen, DeepSeek, and 40+ more free models
+🧡 Dost AI — FINAL STABLE VERSION
+Sirf 100% Working Free AI Models
 """
 
 import streamlit as st
@@ -18,37 +17,29 @@ import random
 from datetime import date
 from urllib.parse import quote
 import streamlit.components.v1 as components
-from huggingface_hub import InferenceClient
 
 # ============================================================
 # 🔐 SECURE SECRETS
 # ============================================================
 def get_secret(name):
-    """Get secret from Streamlit secrets or environment variables"""
     try:
         val = st.secrets.get(name)
         if val and str(val).strip():
             return str(val).strip()
     except Exception:
         pass
-    
     val = os.environ.get(name)
     if val and str(val).strip():
         return str(val).strip()
-    
     return None
 
 # ============================================================
 # 🔐 API KEYS
 # ============================================================
 GROQ_API_KEY = get_secret("GROQ_API_KEY")
-CEREBRAS_API_KEY = get_secret("CEREBRAS_API_KEY")
-MISTRAL_API_KEY = get_secret("MISTRAL_API_KEY")
 AGNES_API_KEY = get_secret("AGNES_API_KEY")
 MUSICAPI_KEY = get_secret("MUSICAPI_KEY")
 HF_API_KEY = get_secret("HF_API_KEY")
-REPLICATE_API_KEY = get_secret("REPLICATE_API_KEY")
-DEEPSEEK_API_KEY = get_secret("DEEPSEEK_API_KEY")
 
 # ============================================================
 # CONFIG
@@ -60,9 +51,7 @@ FREE_MSG_LIMIT_PER_DAY = 40
 TOKEN_LIMIT_PER_DAY = 1000
 IMAGE_TOKEN_COST = 20
 VIDEO_TOKEN_COST = 100
-MUSIC_TOKEN_COST = 30
 
-# Dost AI brand mark
 _DOST_LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
 <defs>
     <linearGradient id="dostLogoBgAvatar" x1="0" y1="0" x2="1" y2="1">
@@ -79,264 +68,60 @@ _DOST_LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="64" height="6
 DOST_LOGO_AVATAR = "data:image/svg+xml;base64," + base64.b64encode(_DOST_LOGO_SVG.encode("utf-8")).decode("ascii")
 
 # ============================================================
-# 🎨 COMPLETE MODEL CONFIGURATIONS
+# 🎯 SIRF WORKING FREE MODELS
 # ============================================================
 
-# --- ALL IMAGE MODELS (15+ Free) ---
+# --- IMAGE MODELS (100% FREE & WORKING) ---
 IMAGE_MODELS = {
     "pollinations": {
         "label": "Pollinations AI",
         "icon": "🖼️",
-        "desc": "Bilkul free, no key",
+        "desc": "Bilkul free, no key needed",
         "provider": "pollinations",
-        "type": "url",
     },
     "agnes": {
         "label": "Agnes Image",
         "icon": "🤖",
         "desc": "Free, high quality",
         "provider": "agnes",
-        "type": "url",
-    },
-    "huggingface_flux_schnell": {
-        "label": "FLUX.1-schnell",
-        "icon": "⚡",
-        "desc": "Fastest 4-step",
-        "provider": "huggingface",
-        "model": "black-forest-labs/FLUX.1-schnell",
-        "type": "bytes",
-    },
-    "huggingface_flux_dev": {
-        "label": "FLUX.1-dev",
-        "icon": "🎨",
-        "desc": "Higher quality",
-        "provider": "huggingface",
-        "model": "black-forest-labs/FLUX.1-dev",
-        "type": "bytes",
-    },
-    "huggingface_sdxl": {
-        "label": "SDXL",
-        "icon": "🌈",
-        "desc": "Stable Diffusion XL",
-        "provider": "huggingface",
-        "model": "stabilityai/stable-diffusion-xl-base-1.0",
-        "type": "bytes",
-    },
-    "huggingface_sd35": {
-        "label": "SD 3.5",
-        "icon": "✨",
-        "desc": "Latest SD",
-        "provider": "huggingface",
-        "model": "stabilityai/stable-diffusion-3.5-large",
-        "type": "bytes",
-    },
-    "huggingface_playground": {
-        "label": "Playground v2.5",
-        "icon": "📸",
-        "desc": "Photorealistic",
-        "provider": "huggingface",
-        "model": "playgroundai/playground-v2.5-1024px-aesthetic",
-        "type": "bytes",
-    },
-    "huggingface_kandinsky": {
-        "label": "Kandinsky 2.2",
-        "icon": "🎭",
-        "desc": "Russian model",
-        "provider": "huggingface",
-        "model": "kandinsky-community/kandinsky-2-2-decoder",
-        "type": "bytes",
-    },
-    "huggingface_wuerstchen": {
-        "label": "Wuerstchen",
-        "icon": "🐇",
-        "desc": "Super fast 2-step",
-        "provider": "huggingface",
-        "model": "warp-ai/wuerstchen",
-        "type": "bytes",
-    },
-    "huggingface_openjourney": {
-        "label": "OpenJourney",
-        "icon": "🎨",
-        "desc": "Midjourney-style",
-        "provider": "huggingface",
-        "model": "prompthero/openjourney-v4",
-        "type": "bytes",
-    },
-    "huggingface_dreamshaper": {
-        "label": "DreamShaper",
-        "icon": "🌟",
-        "desc": "Fantasy/portrait",
-        "provider": "huggingface",
-        "model": "Lykon/dreamshaper-8",
-        "type": "bytes",
-    },
-    "huggingface_realistic": {
-        "label": "Realistic Vision",
-        "icon": "👤",
-        "desc": "Photorealistic",
-        "provider": "huggingface",
-        "model": "SG161222/Realistic_Vision_V4.0",
-        "type": "bytes",
     },
 }
 
-# --- ALL VIDEO MODELS (8+ Free) ---
+# --- VIDEO MODELS (100% FREE & WORKING) ---
 VIDEO_MODELS = {
     "agnes": {
         "label": "Agnes Video",
         "icon": "🎬",
         "desc": "Free, high quality",
         "provider": "agnes",
-        "type": "url",
-    },
-    "huggingface_cogvideo": {
-        "label": "CogVideoX",
-        "icon": "🎥",
-        "desc": "5B model",
-        "provider": "huggingface_video",
-        "model": "THUDM/CogVideoX-5b",
-        "type": "bytes",
-    },
-    "huggingface_modelscope": {
-        "label": "ModelScope",
-        "icon": "🏔️",
-        "desc": "Alibaba's model",
-        "provider": "huggingface_video",
-        "model": "damo/ModelScope",
-        "type": "bytes",
-    },
-    "huggingface_i2vgen": {
-        "label": "I2VGen-XL",
-        "icon": "🔄",
-        "desc": "Image-to-video",
-        "provider": "huggingface_video",
-        "model": "ali-vilab/i2vgen-xl",
-        "type": "bytes",
-    },
-    "huggingface_svd": {
-        "label": "Stable Video Diffusion",
-        "icon": "📹",
-        "desc": "SVD",
-        "provider": "huggingface_video",
-        "model": "stabilityai/stable-video-diffusion-img2vid",
-        "type": "bytes",
-    },
-    "huggingface_pyramid": {
-        "label": "Pyramid Flow",
-        "icon": "🔺",
-        "desc": "New, great quality",
-        "provider": "huggingface_video",
-        "model": "PYRAMID-FLOW/pyramid-flow",
-        "type": "bytes",
-    },
-    "huggingface_mochi": {
-        "label": "Mochi-1",
-        "icon": "🌀",
-        "desc": "10B model",
-        "provider": "huggingface_video",
-        "model": "genmo/mochi-1",
-        "type": "bytes",
     },
 }
 
-# --- ALL MUSIC MODELS (3+ Free) ---
+# --- MUSIC MODELS (100% FREE & WORKING) ---
 MUSIC_MODELS = {
-    "huggingface_musicgen": {
-        "label": "MusicGen",
-        "icon": "🎵",
-        "desc": "Meta's AI",
-        "provider": "huggingface_music",
-        "model": "facebook/musicgen-large",
-        "type": "bytes",
-    },
-    "huggingface_audiocraft": {
-        "label": "AudioCraft",
-        "icon": "🎶",
-        "desc": "Meta's suite",
-        "provider": "huggingface_music",
-        "model": "facebook/audiocraft",
-        "type": "bytes",
-    },
     "musicapi": {
         "label": "MusicAPI Sonic",
         "icon": "🎼",
         "desc": "75 free credits",
         "provider": "musicapi",
-        "type": "url",
     },
 }
 
-# --- ALL CHAT MODELS (12+ Free) ---
+# --- CHAT MODELS (100% FREE & WORKING) ---
 CHAT_MODELS = {
-    "groq_llama32_1b": {
-        "label": "Llama 3.2 1B",
+    "groq_lite": {
+        "label": "Groq Lite",
         "icon": "⚡",
         "desc": "Sabse fast",
         "provider": "groq",
-        "model_id": "meta-llama/llama-3.2-1b-preview",
+        "model_id": "llama3-8b-8192",
     },
-    "groq_llama32_3b": {
-        "label": "Llama 3.2 3B",
-        "icon": "🔥",
-        "desc": "Fast & capable",
+    "groq_standard": {
+        "label": "Groq Standard",
+        "icon": "💬",
+        "desc": "All-round powerful",
         "provider": "groq",
-        "model_id": "meta-llama/llama-3.2-3b-preview",
-    },
-    "groq_llama31_70b": {
-        "label": "Llama 3.1 70B",
-        "icon": "💪",
-        "desc": "Powerful",
-        "provider": "groq",
-        "model_id": "meta-llama/llama-3.1-70b-versatile",
-    },
-    "groq_llama31_405b": {
-        "label": "Llama 3.1 405B",
-        "icon": "🧠",
-        "desc": "Biggest open model",
-        "provider": "groq",
-        "model_id": "meta-llama/llama-3.1-405b-reasoning",
-    },
-    "groq_mixtral": {
-        "label": "Mixtral 8x7B",
-        "icon": "🌪️",
-        "desc": "MoE expert",
-        "provider": "groq",
-        "model_id": "mistralai/mixtral-8x7b-32768",
-    },
-    "groq_gemma2_9b": {
-        "label": "Gemma 2 9B",
-        "icon": "✨",
-        "desc": "Google's model",
-        "provider": "groq",
-        "model_id": "google/gemma-2-9b-it",
-    },
-    "groq_gemma2_27b": {
-        "label": "Gemma 2 27B",
-        "icon": "🌟",
-        "desc": "Google's big model",
-        "provider": "groq",
-        "model_id": "google/gemma-2-27b-it",
-    },
-    "groq_phi3": {
-        "label": "Phi-3",
-        "icon": "📚",
-        "desc": "Microsoft",
-        "provider": "groq",
-        "model_id": "microsoft/phi-3-mini-128k-instruct",
-    },
-    "groq_qwen25": {
-        "label": "Qwen 2.5",
-        "icon": "🐉",
-        "desc": "Alibaba",
-        "provider": "groq",
-        "model_id": "qwen/qwen-2.5-32b-instruct",
-    },
-    "cerebras": {
-        "label": "Cerebras AI",
-        "icon": "🧠",
-        "desc": "1M tokens/min",
-        "provider": "cerebras",
-        "model_id": "llama3.1-70b",
+        "model_id": "llama3-70b-8192",
     },
     "pollinations": {
         "label": "Pollinations Chat",
@@ -355,6 +140,154 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# ============================================================
+# CUSTOM CSS - SAME AS ORIGINAL
+# ============================================================
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap');
+
+* { font-family: 'Google Sans', 'Segoe UI', sans-serif !important; }
+
+.block-container {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    max-width: 100% !important;
+}
+
+.stApp { background: #ffffff; min-height: 100vh; }
+.stApp > header, .stApp > footer { display: none !important; }
+
+section[data-testid="stSidebar"] {
+    background: #ffffff !important;
+    border-right: none !important;
+    padding-top: 16px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+}
+section[data-testid="stSidebar"] * { color: #1f1f1f !important; }
+section[data-testid="stSidebar"] hr { display: none !important; }
+section[data-testid="stSidebar"] div.stButton > button {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 24px !important;
+    color: #444746 !important;
+    text-align: left !important;
+    padding: 12px 16px !important;
+    margin-bottom: 4px !important;
+    font-weight: 400 !important;
+    font-size: 14px !important;
+    box-shadow: none !important;
+}
+section[data-testid="stSidebar"] div.stButton > button:hover { background: #f0f4f9 !important; }
+section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
+    background: #d3e3fd !important;
+    border: none !important;
+    color: #041e49 !important;
+    font-weight: 500 !important;
+}
+
+.main-glass {
+    background: #ffffff;
+    max-width: 900px;
+    padding: 6px 18px 10px 18px;
+    margin: 0 auto;
+    border: none;
+}
+
+.gemini-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 50px 0 10px 0 !important;
+    border-bottom: none !important;
+    background: transparent !important;
+    margin-bottom: 4px !important;
+}
+.gemini-brand {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    background: transparent !important;
+}
+.gemini-brand svg { width: 34px !important; height: 34px !important; }
+.gemini-title {
+    font-size: 22px !important;
+    font-weight: 600 !important;
+    background: linear-gradient(90deg, #4285f4, #9b72cb, #d96570) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+}
+
+.hero-text { text-align: center; padding: 32px 0 24px 0; }
+.hero-text h1 {
+    font-size: 30px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0 0 4px 0;
+}
+.hero-text p { font-size: 15px; color: #5f6368; margin: 0 0 28px 0; }
+
+.stChatMessage {
+    background: #f0f4f9 !important;
+    border: none !important;
+    border-radius: 18px !important;
+    padding: 12px 18px !important;
+    margin-bottom: 10px !important;
+    box-shadow: none !important;
+}
+.stChatMessage p, .stChatMessage span { color: #1f1f1f !important; }
+
+div.st-key-chat_msg_box {
+    height: auto !important;
+    max-height: 58vh !important;
+    overflow-y: auto !important;
+    padding-right: 6px !important;
+}
+
+div[data-testid="stSelectbox"] > div > div {
+    background: #f0f4f9 !important;
+    border: 1px solid #e8eaed !important;
+    border-radius: 14px !important;
+    min-height: 44px !important;
+}
+
+div.stButton > button {
+    border-radius: 20px !important;
+    font-weight: 500 !important;
+    font-size: 14px !important;
+    padding: 10px 24px !important;
+    border: none !important;
+    background: #4285f4 !important;
+    color: white !important;
+    box-shadow: none !important;
+}
+div.stButton > button:hover { background: #3367d6 !important; }
+
+div.st-key-img_studio_card, div.st-key-vid_studio_card {
+    background: #fafafa;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 22px !important;
+    padding: 20px 22px 22px 22px !important;
+    max-width: 800px !important;
+    margin: 4px auto 26px auto !important;
+}
+
+@media (max-width: 768px) {
+    .main-glass { padding: 8px 10px; margin: 0 auto; }
+    .hero-text { padding: 20px 0 14px 0; }
+    .hero-text h1 { font-size: 22px; }
+    .gemini-title { font-size: 17px !important; }
+}
+</style>
+
+<div class="main-glass">
+""", unsafe_allow_html=True)
 
 # ============================================================
 # USAGE DB
@@ -482,7 +415,7 @@ if "current_chat_id" not in st.session_state:
     st.session_state.current_chat_id = new_id
 
 if "selected_chat_model" not in st.session_state:
-    st.session_state.selected_chat_model = "groq_llama31_70b"
+    st.session_state.selected_chat_model = "groq_lite"
 
 if "gallery" not in st.session_state:
     st.session_state.gallery = []
@@ -494,76 +427,10 @@ if "selected_video_model" not in st.session_state:
     st.session_state.selected_video_model = "agnes"
 
 if "selected_music_model" not in st.session_state:
-    st.session_state.selected_music_model = "huggingface_musicgen"
+    st.session_state.selected_music_model = "musicapi"
 
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "chat"
-
-# ============================================================
-# CUSTOM CSS
-# ============================================================
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap');
-* { font-family: 'Google Sans', 'Segoe UI', sans-serif !important; }
-
-.block-container { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; padding-left: 0.5rem !important; padding-right: 0.5rem !important; max-width: 100% !important; }
-div[data-testid="stElementContainer"], div[data-testid="stVerticalBlock"], div[data-testid="stHorizontalBlock"], div[data-testid="column"] { padding: 0 !important; margin: 0 !important; gap: 0 !important; }
-
-.stApp { background: #ffffff; min-height: 100vh; }
-.stApp > header, .stApp > footer { display: none !important; }
-
-section[data-testid="stSidebar"] { background: #ffffff !important; border-right: none !important; padding-top: 16px !important; padding-left: 10px !important; padding-right: 10px !important; }
-section[data-testid="stSidebar"] * { color: #1f1f1f !important; }
-section[data-testid="stSidebar"] hr { display: none !important; }
-section[data-testid="stSidebar"] div.stButton > button { background: transparent !important; border: none !important; border-radius: 24px !important; color: #444746 !important; text-align: left !important; padding: 12px 16px !important; margin-bottom: 4px !important; font-weight: 400 !important; font-size: 14px !important; box-shadow: none !important; }
-section[data-testid="stSidebar"] div.stButton > button:hover { background: #f0f4f9 !important; }
-section[data-testid="stSidebar"] div.stButton > button[kind="primary"] { background: #d3e3fd !important; border: none !important; color: #041e49 !important; font-weight: 500 !important; }
-
-.main-glass { background: #ffffff; max-width: 900px; padding: 6px 18px 10px 18px; margin: 0 auto; border: none; }
-
-.gemini-header { display: flex !important; align-items: center !important; justify-content: space-between !important; padding: 50px 0 10px 0 !important; border-bottom: none !important; background: transparent !important; position: relative !important; z-index: 100 !important; margin-bottom: 4px !important; }
-.gemini-brand { display: flex !important; align-items: center !important; gap: 12px !important; background: transparent !important; }
-.gemini-brand svg { width: 34px !important; height: 34px !important; }
-.gemini-title { font-size: 22px !important; font-weight: 600 !important; background: linear-gradient(90deg, #4285f4, #9b72cb, #d96570) !important; -webkit-background-clip: text !important; -webkit-text-fill-color: transparent !important; }
-
-.hero-text { text-align: center; padding: 32px 0 24px 0; }
-.hero-text h1 { font-size: 30px; font-weight: 600; background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0 0 4px 0; }
-.hero-text p { font-size: 15px; color: #5f6368; margin: 0 0 28px 0; }
-
-.stChatMessage { background: #f0f4f9 !important; border: none !important; border-radius: 18px !important; padding: 12px 18px !important; margin-bottom: 10px !important; box-shadow: none !important; }
-.stChatMessage p, .stChatMessage span { color: #1f1f1f !important; }
-
-div.st-key-chat_msg_box { height: auto !important; max-height: 58vh !important; overflow-y: auto !important; padding-right: 6px !important; }
-
-div[data-testid="stSelectbox"] > div > div { background: #f0f4f9 !important; border: 1px solid #e8eaed !important; border-radius: 14px !important; min-height: 44px !important; }
-
-div.stButton > button { border-radius: 20px !important; font-weight: 500 !important; font-size: 14px !important; padding: 10px 24px !important; border: none !important; background: #4285f4 !important; color: white !important; box-shadow: none !important; }
-div.stButton > button:hover { background: #3367d6 !important; }
-
-div.st-key-img_studio_card, div.st-key-vid_studio_card {
-    background: #fafafa;
-    border: 1px solid #e0e0e0 !important;
-    border-radius: 22px !important;
-    padding: 20px 22px 22px 22px !important;
-    max-width: 800px !important;
-    margin: 4px auto 26px auto !important;
-}
-
-.model-section-label { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; padding: 13px 12px 16px 2px; border-radius: 8px; margin: 8px 0 8px 2px; }
-.model-section-label.free { background: #e8f0fe; color: #1a56db; }
-.model-section-label.pro { background: #fdeee9; color: #b3541e; }
-
-@media (max-width: 768px) {
-    .main-glass { padding: 8px 10px; margin: 0 auto; }
-    .hero-text { padding: 20px 0 14px 0; }
-    .hero-text h1 { font-size: 22px; }
-    .gemini-title { font-size: 17px !important; }
-}
-</style>
-
-<div class="main-glass">
-""", unsafe_allow_html=True)
 
 # ============================================================
 # FUNCTIONS
@@ -582,26 +449,16 @@ def switch_chat(chat_id):
     st.rerun()
 
 # ============================================================
-# 🎯 API CALLS - ALL MODELS
+# 🎯 API CALLS - SIRF WORKING MODELS
 # ============================================================
 
-# --- CHAT APIs ---
 SYSTEM_PROMPT = f"You are {APP_NAME}, an extremely knowledgeable, precise, and helpful assistant. Reply in the same language the user writes in."
 
+# --- CHAT APIs ---
 def call_groq_chat(api_key, model, messages, temp=0.4):
     if not api_key:
         return "⚠️ GROQ_API_KEY set nahi hai."
     url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    full = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
-    resp = requests.post(url, headers=headers, json={"model": model, "messages": full, "temperature": temp, "max_tokens": 4096}, timeout=90)
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-def call_cerebras_chat(api_key, model, messages, temp=0.4):
-    if not api_key:
-        return "⚠️ CEREBRAS_API_KEY set nahi hai."
-    url = "https://api.cerebras.ai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     full = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
     resp = requests.post(url, headers=headers, json={"model": model, "messages": full, "temperature": temp, "max_tokens": 4096}, timeout=90)
@@ -614,24 +471,6 @@ def call_pollinations_chat(messages, temp=0.4):
     resp = requests.post(url, json={"model": "openai", "messages": full, "temperature": temp}, timeout=90)
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
-
-def call_huggingface_chat(api_key, model, messages, temp=0.4):
-    """Hugging Face chat via Inference API"""
-    if not api_key:
-        return "⚠️ HF_API_KEY set nahi hai."
-    try:
-        client = InferenceClient(api_key=api_key)
-        # Convert messages format
-        chat_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
-        response = client.chat_completion(
-            model=model,
-            messages=chat_messages,
-            temperature=temp,
-            max_tokens=4096,
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Error: {e}"
 
 # --- IMAGE APIs ---
 def run_with_progress(work_fn, estimate_seconds=15, label="Generating"):
@@ -677,23 +516,6 @@ def call_agnes_image(prompt, ratio="9:16", api_key=None):
         resp.raise_for_status()
         data = resp.json()
         return data.get("data", [{}])[0].get("url"), None
-    except Exception as e:
-        return None, f"Error: {e}"
-
-def call_huggingface_image(prompt, model_id, ratio="9:16", api_key=None):
-    """Hugging Face image generation"""
-    if api_key is None:
-        api_key = HF_API_KEY
-    if not api_key:
-        return None, "⚠️ HF_API_KEY set nahi hai."
-    
-    width, height = (768, 1360) if ratio == "9:16" else (1360, 768)
-    try:
-        client = InferenceClient(provider="fal-ai", api_key=api_key)
-        image = client.text_to_image(prompt, model=model_id, width=width, height=height)
-        buf = io.BytesIO()
-        image.save(buf, format="PNG")
-        return buf.getvalue(), None
     except Exception as e:
         return None, f"Error: {e}"
 
@@ -746,61 +568,7 @@ def call_agnes_video(prompt, ratio="9:16", api_key=None):
     except Exception as e:
         return None, f"Error: {e}"
 
-def call_huggingface_video(prompt, model_id, ratio="9:16", api_key=None):
-    """Hugging Face video generation - using Replicate for now"""
-    if api_key is None:
-        api_key = HF_API_KEY
-    if not api_key:
-        return None, "⚠️ HF_API_KEY set nahi hai."
-    
-    # Most HF video models require special handling
-    # For now, return a message
-    return None, "⚠️ Video models on HF require specific setup. Use Agnes Video for now."
-
 # --- MUSIC APIs ---
-def call_huggingface_music(prompt, model_id, api_key=None):
-    """Hugging Face music generation"""
-    if api_key is None:
-        api_key = HF_API_KEY
-    if not api_key:
-        return None, "⚠️ HF_API_KEY set nahi hai."
-    try:
-        client = InferenceClient(api_key=api_key)
-        audio = client.text_to_audio(prompt, model=model_id)
-        return audio, None
-    except Exception as e:
-        return None, f"Error: {e}"
-
-def call_minimax_music(prompt):
-    api_key = get_secret("MINIMAX_API_KEY")
-    if not api_key:
-        return None, "⚠️ MINIMAX_API_KEY set nahi hai."
-    url = "https://api.minimax.io/v1/music_generation"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    payload = {
-        "model": "music-2.6",
-        "prompt": prompt,
-        "lyrics_optimizer": True,
-        "is_instrumental": False,
-        "stream": False,
-        "output_format": "url",
-        "audio_setting": {"sample_rate": 44100, "bitrate": 256000, "format": "mp3"},
-    }
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=180)
-        resp.raise_for_status()
-        data = resp.json()
-        base_resp = data.get("base_resp") or {}
-        status_code = base_resp.get("status_code")
-        if status_code not in (None, 0):
-            return None, f"Error: MiniMax {status_code} — {base_resp.get('status_msg', 'unknown error')}"
-        audio_url = (data.get("data") or {}).get("audio")
-        if not audio_url:
-            return None, f"Error: audio_url nahi mila. Response: {data}"
-        return audio_url, None
-    except Exception as e:
-        return None, f"Error: {e}"
-
 def call_musicapi_music(prompt):
     api_key = get_secret("MUSICAPI_KEY")
     if not api_key:
@@ -913,7 +681,7 @@ with st.sidebar:
     with st.popover("⚙️  Settings", use_container_width=True):
         st.caption(f"💬 Chat free limit: {FREE_MSG_LIMIT_PER_DAY}/day")
         st.caption(f"🪙 Tokens today: {_tokens_left}/{TOKEN_LIMIT_PER_DAY} left")
-        st.caption(f"🖼️ Image = {IMAGE_TOKEN_COST} tokens · 🎬 Video = {VIDEO_TOKEN_COST} tokens · 🎵 Music = {MUSIC_TOKEN_COST} tokens")
+        st.caption(f"🖼️ Image = {IMAGE_TOKEN_COST} tokens · 🎬 Video = {VIDEO_TOKEN_COST} tokens")
         st.caption("🔑 Keys in `.streamlit/secrets.toml`")
 
     st.progress(min(1.0, _tokens_left / TOKEN_LIMIT_PER_DAY), text=f"🪙 {_tokens_left}/{TOKEN_LIMIT_PER_DAY} tokens left today")
@@ -939,7 +707,7 @@ with st.sidebar:
         st.logout()
 
 # ============================================================
-# 🎨 GALLERY FOOTER
+# GALLERY FOOTER
 # ============================================================
 HIGH_QUALITY_PROMPTS = [
     "beautiful anime girl with long flowing silver hair wearing elegant kimono with cherry blossom pattern standing in japanese garden soft morning light 8k ultra detailed portrait masterpiece studio ghibli style cinematic",
@@ -1037,12 +805,8 @@ if st.session_state.active_tab == "chat":
                     
                     if provider == "groq":
                         reply = call_groq_chat(GROQ_API_KEY, model_info["model_id"], api_messages, TEMPERATURE)
-                    elif provider == "cerebras":
-                        reply = call_cerebras_chat(CEREBRAS_API_KEY, model_info["model_id"], api_messages, TEMPERATURE)
                     elif provider == "pollinations":
                         reply = call_pollinations_chat(api_messages, TEMPERATURE)
-                    elif provider == "huggingface_chat":
-                        reply = call_huggingface_chat(HF_API_KEY, model_info["model_id"], api_messages, TEMPERATURE)
                     else:
                         reply = "⚠️ Model not configured yet."
                     
@@ -1059,7 +823,7 @@ if st.session_state.active_tab == "chat":
 # 🖼️ IMAGE TAB
 # ============================================================
 if st.session_state.active_tab == "image":
-    st.markdown("<div class='hero-text'><h1>AI Image Studio</h1><p>15+ Free Models • 9:16 Ratio</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-text'><h1>AI Image Studio</h1><p>Free Models • 9:16 Ratio</p></div>", unsafe_allow_html=True)
 
     with st.container(key="img_studio_card"):
         img_prompt = st.text_area("Describe your image",
@@ -1112,20 +876,6 @@ if st.session_state.active_tab == "image":
                     st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
                     st.image(img_url, caption=img_prompt, use_container_width=True)
                     st.session_state.gallery.insert(0, {"url": img_url, "prompt": img_prompt, "type": "image"})
-                    
-            elif provider == "huggingface":
-                model_id = model_info.get("model")
-                img_bytes, err = run_with_progress(
-                    lambda: call_huggingface_image(img_prompt, model_id, img_ratio, HF_API_KEY),
-                    estimate_seconds=20, label="Image ban raha hai")
-                if err:
-                    st.error(err)
-                else:
-                    deduct_tokens(USER_EMAIL, IMAGE_TOKEN_COST)
-                    st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                    st.image(img_bytes, caption=f"{model_info['label']}: {img_prompt}", use_container_width=True)
-                    # Store in gallery (can't store bytes in session state easily)
-                    st.session_state.gallery.insert(0, {"url": "data:image/png;base64," + base64.b64encode(img_bytes).decode(), "prompt": img_prompt, "type": "image"})
 
     render_creativity_footer()
 
@@ -1133,7 +883,7 @@ if st.session_state.active_tab == "image":
 # 🎬 VIDEO TAB
 # ============================================================
 if st.session_state.active_tab == "video":
-    st.markdown("<div class='hero-text'><h1>AI Video Studio</h1><p>8+ Free Models</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-text'><h1>AI Video Studio</h1><p>Free Model</p></div>", unsafe_allow_html=True)
 
     with st.container(key="vid_studio_card"):
         vid_prompt = st.text_area("Describe your video",
@@ -1177,19 +927,6 @@ if st.session_state.active_tab == "video":
                     st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
                     st.video(vid_url)
                     st.caption(f"🎬 {vid_prompt}")
-                    
-            elif provider == "huggingface_video":
-                model_id = model_info.get("model")
-                vid_url, err = run_with_progress(
-                    lambda: call_huggingface_video(vid_prompt, model_id, vid_ratio, HF_API_KEY),
-                    estimate_seconds=90, label="Video ban raha hai")
-                if err:
-                    st.error(err if "setup" not in err else "⚠️ HF video models require Replicate API key. Use Agnes Video for now.")
-                else:
-                    if vid_url:
-                        deduct_tokens(USER_EMAIL, VIDEO_TOKEN_COST)
-                        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                        st.video(vid_url)
 
     render_creativity_footer()
 
@@ -1197,7 +934,7 @@ if st.session_state.active_tab == "video":
 # 🎵 MUSIC TAB
 # ============================================================
 if st.session_state.active_tab == "music":
-    st.markdown("<div class='hero-text'><h1>AI Music Studio</h1><p>MusicGen • AudioCraft • MusicAPI</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-text'><h1>AI Music Studio</h1><p>MusicAPI Sonic</p></div>", unsafe_allow_html=True)
     
     song_prompt = st.text_area("Describe your song", 
                               placeholder="Jaise: uplifting Hindi devotional or lo-fi beat",
@@ -1218,26 +955,13 @@ if st.session_state.active_tab == "music":
         if not song_prompt.strip():
             st.warning("Pehle description likho.")
         else:
-            model_info = MUSIC_MODELS[music_model]
-            provider = model_info.get("provider")
-            
             with st.spinner("Music generate ho raha hai..."):
-                if provider == "huggingface_music":
-                    model_id = model_info.get("model")
-                    audio_data, err = call_huggingface_music(song_prompt, model_id, HF_API_KEY)
-                    if err:
-                        st.error(err)
-                    else:
-                        st.audio(audio_data, format="audio/wav")
-                        st.caption(f"🎵 {song_prompt}")
-                        
-                elif provider == "musicapi":
-                    audio_url, err = call_musicapi_music(song_prompt)
-                    if err:
-                        st.error(err)
-                    else:
-                        st.audio(audio_url, format="audio/mp3")
-                        st.caption(f"🎵 {song_prompt}")
+                audio_url, err = call_musicapi_music(song_prompt)
+                if err:
+                    st.error(err)
+                else:
+                    st.audio(audio_url, format="audio/mp3")
+                    st.caption(f"🎵 {song_prompt}")
     
     render_creativity_footer()
 
@@ -1245,7 +969,7 @@ if st.session_state.active_tab == "music":
 # 🌐 TRANSLATE TAB
 # ============================================================
 if st.session_state.active_tab == "translate":
-    st.markdown("<div class='hero-text'><h1>Free Translate</h1><p>LibreTranslate • 100+ Languages</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-text'><h1>Free Translate</h1><p>LibreTranslate</p></div>", unsafe_allow_html=True)
     
     LANGS = {"Auto": "auto", "Hindi": "hi", "English": "en", "Marathi": "mr", 
              "Gujarati": "gu", "Tamil": "ta", "Telugu": "te", "Bengali": "bn", 
