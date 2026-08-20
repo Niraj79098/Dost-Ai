@@ -16,6 +16,7 @@ from datetime import date
 from urllib.parse import quote
 import random
 import streamlit.components.v1 as components
+from huggingface_hub import InferenceClient
 
 # ============================================================
 # 🔐 SECURE SECRETS - IMPROVED
@@ -1543,40 +1544,30 @@ def get_image_url_pollinations(prompt, ratio="9:16"):
     return f"https://image.pollinations.ai/prompt/{quote(prompt)}?width={width}&height={height}&model=flux&enhance=true&nologo=true"
 
 def call_huggingface_image(prompt, ratio="9:16", api_key=None):
-    """Hugging Face free Inference API - needs a free HF account + free access token
-    (huggingface.co/settings/tokens). Free accounts get a monthly credit allowance,
-    no card required. Uses FLUX.1-dev via HF's Inference Providers router."""
+    """Hugging Face free Inference Providers - needs a free HF account + free access token
+    (huggingface.co/settings/tokens). Uses fal-ai provider which actively serves FLUX models."""
     if api_key is None:
         api_key = HF_API_KEY
     if not api_key:
         return None, "⚠ HF_API_KEY set nahi hai. huggingface.co/settings/tokens se free token banao."
     width, height = (768, 1360) if ratio == "9:16" else (1360, 768)
-    headers = {"Authorization": f"Bearer {api_key}"}
-    payload = {"inputs": prompt, "parameters": {"width": width, "height": height}}
 
     models_to_try = [
-        "black-forest-labs/FLUX.1-dev",
-        "stabilityai/stable-diffusion-3.5-large",
         "black-forest-labs/FLUX.1-schnell",
+        "black-forest-labs/FLUX.1-dev",
     ]
 
     last_error = None
     for model in models_to_try:
-        url = f"https://router.huggingface.co/hf-inference/models/{model}"
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=120)
-            if resp.status_code == 503:
-                last_error = "Model load ho raha hai (cold start), thodi der me try karo."
-                continue
-            if resp.status_code == 410:
-                last_error = f"{model} ab available nahi hai (deprecated)."
-                continue
-            if resp.status_code != 200:
-                last_error = f"Error {resp.status_code}: {resp.text[:200]}"
-                continue
-            return resp.content, None
+            client = InferenceClient(provider="fal-ai", api_key=api_key)
+            image = client.text_to_image(prompt, model=model, width=width, height=height)
+            import io
+            buf = io.BytesIO()
+            image.save(buf, format="PNG")
+            return buf.getvalue(), None
         except Exception as e:
-            last_error = f"Error: {e}"
+            last_error = f"{model}: {e}"
             continue
 
     return None, f"⚠ Sabhi models fail ho gaye. Last error: {last_error}"
