@@ -1545,26 +1545,41 @@ def get_image_url_pollinations(prompt, ratio="9:16"):
 def call_huggingface_image(prompt, ratio="9:16", api_key=None):
     """Hugging Face free Inference API - needs a free HF account + free access token
     (huggingface.co/settings/tokens). Free accounts get a monthly credit allowance,
-    no card required. Uses Flux.1-schnell (fast, good quality, open weights)."""
+    no card required. Uses FLUX.1-dev via HF's Inference Providers router."""
     if api_key is None:
         api_key = HF_API_KEY
     if not api_key:
-        return None, "⚠️ HF_API_KEY set nahi hai. huggingface.co/settings/tokens se free token banao."
-    url = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
-    headers = {"Authorization": f"Bearer {api_key}"}
+        return None, "⚠ HF_API_KEY set nahi hai. huggingface.co/settings/tokens se free token banao."
     width, height = (768, 1360) if ratio == "9:16" else (1360, 768)
+    headers = {"Authorization": f"Bearer {api_key}"}
     payload = {"inputs": prompt, "parameters": {"width": width, "height": height}}
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=120)
-        if resp.status_code == 503:
-            # Model is "cold" / loading on HF's shared infra - normal on free tier
-            return None, "⚠️ Model warm ho raha hai (free tier), 20-30 sec me phir try karo."
-        resp.raise_for_status()
-        # HF Inference API returns raw image bytes on success
-        b64 = base64.b64encode(resp.content).decode("ascii")
-        return f"data:image/png;base64,{b64}", None
-    except Exception as e:
-        return None, f"Error: {e}"
+
+    models_to_try = [
+        "black-forest-labs/FLUX.1-dev",
+        "stabilityai/stable-diffusion-3.5-large",
+        "black-forest-labs/FLUX.1-schnell",
+    ]
+
+    last_error = None
+    for model in models_to_try:
+        url = f"https://router.huggingface.co/hf-inference/models/{model}"
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=120)
+            if resp.status_code == 503:
+                last_error = "Model load ho raha hai (cold start), thodi der me try karo."
+                continue
+            if resp.status_code == 410:
+                last_error = f"{model} ab available nahi hai (deprecated)."
+                continue
+            if resp.status_code != 200:
+                last_error = f"Error {resp.status_code}: {resp.text[:200]}"
+                continue
+            return resp.content, None
+        except Exception as e:
+            last_error = f"Error: {e}"
+            continue
+
+    return None, f"⚠ Sabhi models fail ho gaye. Last error: {last_error}"
 
 # ============================================================
 # MODEL POPOVER
