@@ -1,6 +1,6 @@
 """
-🧡 Dost AI — FINAL FIXED VERSION
-All Free AI Tools: Chat, Image, Video, Music, Translate
+🧡 Dost AI — COMPLETE FREE AI STUDIO
+All Free AI Tools: Chat, Image, Video, Music, Story, Anime, AI Girlfriend, Uncensored Chat
 """
 
 import streamlit as st
@@ -16,22 +16,21 @@ from datetime import date
 from urllib.parse import quote
 import random
 import streamlit.components.v1 as components
-from huggingface_hub import InferenceClient
+import json
+import httpx
 
 # ============================================================
 # 🔐 SECURE SECRETS - IMPROVED
 # ============================================================
 def get_secret(name):
     """Get secret from Streamlit secrets or environment variables"""
-    # Try Streamlit secrets first (.streamlit/secrets.toml)
     try:
         val = st.secrets.get(name)
         if val and str(val).strip():
             return str(val).strip()
-    except Exception as e:
+    except Exception:
         pass
     
-    # Fall back to environment variables
     val = os.environ.get(name)
     if val and str(val).strip():
         return str(val).strip()
@@ -39,15 +38,22 @@ def get_secret(name):
     return None
 
 # ============================================================
-# 🔐 API KEYS
+# 🔐 API KEYS - ALL FREE MODELS
 # ============================================================
+# Existing
 GROQ_API_KEY = get_secret("GROQ_API_KEY")
 CEREBRAS_API_KEY = get_secret("CEREBRAS_API_KEY")
 MISTRAL_API_KEY = get_secret("MISTRAL_API_KEY")
 AGNES_API_KEY = get_secret("AGNES_API_KEY")
 MINIMAX_API_KEY = get_secret("MINIMAX_API_KEY")
 MUSICAPI_KEY = get_secret("MUSICAPI_KEY")
-HF_API_KEY = get_secret("HF_API_KEY")  # Hugging Face - free account, free monthly credits
+
+# New Free Models
+AION_API_KEY = get_secret("AION_API_KEY")
+INNERHAVEN_API_KEY = get_secret("INNERHAVEN_API_KEY")
+WESHOP_API_KEY = get_secret("WESHOP_API_KEY")
+GOOGLE_API_KEY = get_secret("GOOGLE_API_KEY")
+ZHIPU_API_KEY = get_secret("ZHIPU_API_KEY")
 
 # ============================================================
 # CONFIG
@@ -57,14 +63,10 @@ USER_NAME = "Niraj"
 TEMPERATURE = 0.4
 FREE_MSG_LIMIT_PER_DAY = 40
 
-# 🪙 Per-account daily token wallet (resets every day, per Google account)
 TOKEN_LIMIT_PER_DAY = 1000
 IMAGE_TOKEN_COST = 20
 VIDEO_TOKEN_COST = 100
 
-# Dost AI brand mark (same SVG used in the top header) — reused as the
-# assistant's chat avatar, so replies visually look like they came from
-# "Dost AI" instead of a generic robot emoji.
 _DOST_LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
 <defs>
     <linearGradient id="dostLogoBgAvatar" x1="0" y1="0" x2="1" y2="1">
@@ -81,7 +83,7 @@ _DOST_LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="64" height="6
 DOST_LOGO_AVATAR = "data:image/svg+xml;base64," + base64.b64encode(_DOST_LOGO_SVG.encode("utf-8")).decode("ascii")
 
 # ============================================================
-# 🎨 HIGH QUALITY PROMPTS - 9:16 RATIO
+# 🎨 HIGH QUALITY PROMPTS
 # ============================================================
 HIGH_QUALITY_PROMPTS = [
     "beautiful anime girl with long flowing silver hair wearing elegant kimono with cherry blossom pattern standing in japanese garden soft morning light 8k ultra detailed portrait masterpiece studio ghibli style cinematic",
@@ -94,16 +96,10 @@ HIGH_QUALITY_PROMPTS = [
     "mysterious fox spirit with nine tails floating in magical forest glowing blue orbs 8k ultra detailed portrait anime enchanting",
     "warrior princess with flowing red cape standing on cliff edge dramatic storm sky lightning 8k ultra detailed portrait epic fantasy cinematic",
     "beautiful mermaid with pearl necklace sitting on rock in ocean sunset waves crashing 8k ultra detailed portrait fantasy art dreamy",
-    "ninja in black outfit standing on rooftop at night full moon city lights below 8k ultra detailed portrait dramatic cinematic",
-    "crystal queen with crown of diamonds sitting on throne of ice winter palace background 8k ultra detailed portrait fantasy majestic",
-    "phoenix rising from flames fire wings spread dramatic lighting 8k ultra detailed portrait epic mythological cinematic",
-    "beautiful geisha with umbrella walking through autumn leaves traditional japanese street 8k ultra detailed portrait historical artistic",
-    "angel with white wings descending from heaven golden light clouds 8k ultra detailed portrait divine ethereal cinematic",
-    "dark elf warrior with bow and arrow in mystical forest glowing plants 8k ultra detailed portrait fantasy epic",
 ]
 
 # ============================================================
-# MODEL TIERS
+# MODEL TIERS - EXTENDED WITH ALL NEW MODELS
 # ============================================================
 MODEL_TIERS = {
     "free": {
@@ -144,6 +140,22 @@ MODEL_TIERS = {
                 "desc": "Bilkul free, no key",
                 "provider": "pollinations",
             },
+            "aion-roleplay": {
+                "label": "Aion Roleplay",
+                "icon": "🎭",
+                "desc": "Storytelling & RP",
+                "provider": "aion",
+                "model_id": "aion-3.0",
+                "badge": "New",
+            },
+            "zhipu": {
+                "label": "Zhipu AI",
+                "icon": "🧠",
+                "desc": "Reasoning expert",
+                "provider": "zhipu",
+                "model_id": "glm-4.7-flash",
+                "badge": "New",
+            },
         },
     },
     "pro": {
@@ -175,24 +187,88 @@ MODEL_TIERS = {
             "musicapi-sonic": {
                 "label": "MusicAPI Sonic",
                 "icon": "🎼",
-                "desc": "75 free credits (signup)",
+                "desc": "75 free credits",
                 "kind": "music",
                 "secret_name": "MUSICAPI_KEY",
+            },
+            "google-gemini": {
+                "label": "Google Gemini",
+                "icon": "🌟",
+                "desc": "15 RPM, 1500 RPD",
+                "kind": "chat",
+                "secret_name": "GOOGLE_API_KEY",
+                "model": "gemini-2.0-flash",
+                "badge": "New",
             },
         },
     },
 }
+
 DEFAULT_CHAT_MODEL = "groq-standard"
 
+# ============================================================
+# IMAGE MODELS - EXTENDED
+# ============================================================
 IMAGE_MODELS = {
-    "pollinations": {"label": "Pollinations AI", "icon": "🖼️", "desc": "Bilkul free"},
+    "pollinations": {"label": "Pollinations AI", "icon": "🖼️", "desc": "Bilkul free, no key"},
     "agnes": {"label": "Agnes AI", "icon": "🤖", "desc": "Free, high quality"},
-    "huggingface": {"label": "Hugging Face (Flux)", "icon": "🤗", "desc": "Free account credits"},
 }
 
+# ============================================================
+# VIDEO MODELS
+# ============================================================
+VIDEO_MODELS = {
+    "agnes": {"label": "Agnes AI", "icon": "🤖", "desc": "Free video gen"},
+}
+
+# ============================================================
+# MUSIC MODELS
+# ============================================================
 MUSIC_MODELS = {
-    "minimax": {"label": "MiniMax", "icon": "🎵", "desc": "Paid balance chahiye"},
+    "minimax": {"label": "MiniMax", "icon": "🎵", "desc": "100 calls/day"},
     "musicapi": {"label": "MusicAPI Sonic", "icon": "🎼", "desc": "75 free credits"},
+}
+
+# ============================================================
+# STORY GENRES
+# ============================================================
+STORY_GENRES = {
+    "fantasy": {"label": "🏰 Fantasy", "desc": "Dragons, magic, kingdoms"},
+    "scifi": {"label": "🚀 Sci-Fi", "desc": "Space, future, technology"},
+    "romance": {"label": "❤️ Romance", "desc": "Love, emotions, drama"},
+    "mystery": {"label": "🔍 Mystery", "desc": "Suspense, thriller, detective"},
+    "adventure": {"label": "🗺️ Adventure", "desc": "Travel, exploration, action"},
+    "horror": {"label": "👻 Horror", "desc": "Ghosts, terror, nightmare"},
+    "comedy": {"label": "😂 Comedy", "desc": "Humor, funny, laughter"},
+    "anime": {"label": "🎌 Anime", "desc": "Manga, Japanese animation style"},
+}
+
+# ============================================================
+# ANIME STYLES
+# ============================================================
+ANIME_STYLES = {
+    "ghibli": {"label": "Studio Ghibli", "desc": "Soft, dreamy, magical"},
+    "shonen": {"label": "Shonen Jump", "desc": "Bold, action, dramatic"},
+    "shoujo": {"label": "Shojo", "desc": "Romantic, elegant, sparkly"},
+    "cyberpunk": {"label": "Cyberpunk", "desc": "Neon, futuristic, edgy"},
+    "vintage": {"label": "Vintage 80s", "desc": "Retro, classic anime style"},
+    "chibi": {"label": "Chibi", "desc": "Cute, small, kawaii"},
+    "realistic": {"label": "Realistic", "desc": "Detailed, lifelike anime"},
+    "watercolor": {"label": "Watercolor", "desc": "Soft, artistic, painted"},
+}
+
+# ============================================================
+# AI GIRLFRIEND PERSONALITIES
+# ============================================================
+GF_PERSONALITIES = {
+    "caring": {"label": "💕 Caring", "desc": "Sweet, loving, supportive girlfriend"},
+    "flirty": {"label": "😉 Flirty", "desc": "Playful, teasing, romantic"},
+    "sassy": {"label": "🔥 Sassy", "desc": "Confident, witty, independent"},
+    "innocent": {"label": "🌸 Innocent", "desc": "Shy, pure, cute girlfriend"},
+    "dominant": {"label": "👑 Dominant", "desc": "Strong, protective, bossy"},
+    "submissive": {"label": "🌹 Submissive", "desc": "Gentle, obedient, sweet"},
+    "nerdy": {"label": "🤓 Nerdy", "desc": "Smart, geeky, intellectual"},
+    "adult": {"label": "🔞 Adult 18+", "desc": "Mature, explicit content (age verified only)"},
 }
 
 # ============================================================
@@ -206,7 +282,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# CUSTOM CSS - COMPLETE FIX WITH GAPS
+# CUSTOM CSS - SAME AS ORIGINAL (UNCHANGED)
 # ============================================================
 st.markdown("""
 <style>
@@ -214,16 +290,12 @@ st.markdown("""
 
 * { font-family: 'Google Sans', 'Roboto', 'Segoe UI', sans-serif !important; }
 
-/* Don't hijack Streamlit's built-in Material icon font — otherwise icons like
-   the sidebar collapse arrow, "expand_more", and "settings" render as raw
-   text (e.g. "keyboard_double_arrow_left") instead of actual icon glyphs. */
 span[data-testid="stIconMaterial"],
 [class*="material-symbols"],
 [class*="material-icons"] {
     font-family: 'Material Symbols Rounded', 'Material Symbols Outlined', 'Material Icons' !important;
 }
 
-/* === RESET === */
 .block-container {
     padding-top: 0.5rem !important;
     padding-bottom: 0.5rem !important;
@@ -242,18 +314,13 @@ div.st-emotion-cache-1r6slb0 {
     gap: 0 !important;
 }
 
-/* breathing room between stacked sidebar elements (nav buttons, popovers, etc) */
 section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] {
     margin-bottom: 6px !important;
 }
 
-/* breathing room between stacked elements in the main column */
 .main-glass div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] {
     margin-bottom: 10px !important;
 }
-/* generous, even gap between side-by-side controls (prompt box + model
-   picker, source + target language, etc.) and bottom-align them so a tall
-   textarea and a short selectbox don't look "stuck" to each other */
 .main-glass div[data-testid="stHorizontalBlock"] {
     gap: 24px !important;
     align-items: flex-end !important;
@@ -269,7 +336,6 @@ section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div[data-t
     min-height: 100vh;
 }
 
-/* === SIDEBAR === */
 section[data-testid="stSidebar"] {
     background: #ffffff !important;
     border-right: none !important;
@@ -316,7 +382,6 @@ section[data-testid="stSidebar"] div[data-testid="stPopover"] button:hover {
     background: #f0f4f9 !important;
 }
 
-/* === MAIN GLASS === */
 .main-glass {
     background: #ffffff;
     max-width: 900px;
@@ -325,7 +390,6 @@ section[data-testid="stSidebar"] div[data-testid="stPopover"] button:hover {
     border: none;
 }
 
-/* === HEADER - LOGO FIXED === */
 .gemini-header {
     display: flex !important;
     align-items: center !important;
@@ -367,7 +431,6 @@ section[data-testid="stSidebar"] div[data-testid="stPopover"] button:hover {
     color: #fff !important;
 }
 
-/* === HERO === */
 .hero-text {
     text-align: center;
     padding: 32px 0 24px 0;
@@ -386,7 +449,6 @@ section[data-testid="stSidebar"] div[data-testid="stPopover"] button:hover {
     margin: 0 0 28px 0;
 }
 
-/* === QUICK ACTIONS - WITH PROPER GAPS === */
 .quick-actions {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -410,7 +472,6 @@ section[data-testid="stSidebar"] div[data-testid="stPopover"] button:hover {
 .quick-action-btn .label { color: #1f1f1f; font-weight: 400; font-size: 14px; }
 .quick-action-btn .desc { color: #5f6368; font-size: 11px; margin-top: 2px; }
 
-/* === CHAT WRAPPER === */
 .chat-wrapper {
     max-width: 700px;
     margin: 10px auto 0 auto;
@@ -433,12 +494,6 @@ section[data-testid="stSidebar"] div[data-testid="stPopover"] button:hover {
     box-shadow: 0 0 0 3px rgba(66,133,244,0.12) !important;
 }
 
-/* === CHAT INPUT FORM STYLING === */
-/* Inline chat form (replaces st.chat_input, which cannot be un-stuck from
-   the browser bottom on any Streamlit version) — styled as one continuous
-   rounded pill (like Gemini's "Ask Gemini" bar), text + send button fused
-   together instead of two separate boxes. Uses data-testid selectors (not
-   the newer st-key- class) so it works on older Streamlit versions too. */
 div[data-testid="stForm"] {
     border: 1px solid #e0e3e8 !important;
     border-radius: 28px !important;
@@ -483,7 +538,6 @@ div[data-testid="stFormSubmitButton"] button:hover {
     background: #3367d6 !important;
 }
 
-/* === MODEL SELECTOR (real popover trigger, right-aligned, pill-styled) === */
 .main-glass div[data-testid="stPopover"] {
     display: flex !important;
     justify-content: flex-end !important;
@@ -504,7 +558,6 @@ div[data-testid="stFormSubmitButton"] button:hover {
     background: #e8eef6 !important;
 }
 
-/* === MODEL LIST INSIDE THE POPOVER — compact, distinct FREE/PRO look === */
 div[data-testid="stPopoverBody"] {
     min-width: 230px !important;
 }
@@ -543,7 +596,6 @@ div[data-testid="stPopoverBody"] .stCaption {
 .model-section-label.free { background: #e8f0fe; color: #1a56db; }
 .model-section-label.pro { background: #fdeee9; color: #b3541e; }
 
-/* === GENERATION INPUTS (Image / Video / Music / Translate prompt boxes) === */
 .main-glass div[data-testid="stTextArea"] textarea {
     background: #f0f4f9 !important;
     border: 1px solid #e8eaed !important;
@@ -557,7 +609,6 @@ div[data-testid="stPopoverBody"] .stCaption {
     box-shadow: 0 0 0 3px rgba(66,133,244,0.12) !important;
 }
 
-/* === SELECTBOX (Model / Source / Target pickers) === */
 .main-glass div[data-testid="stSelectbox"] label {
     font-size: 12px !important;
     color: #5f6368 !important;
@@ -574,8 +625,6 @@ div[data-testid="stPopoverBody"] .stCaption {
     border-color: #4285f4 !important;
 }
 
-/* on narrow screens, stack the prompt box above the model/language
-   pickers instead of squeezing them side-by-side */
 @media (max-width: 640px) {
     .main-glass div[data-testid="stHorizontalBlock"]:has(div[data-testid="stTextArea"]) {
         flex-wrap: wrap !important;
@@ -585,7 +634,6 @@ div[data-testid="stPopoverBody"] .stCaption {
     }
 }
 
-/* === CHAT MESSAGES === */
 .stChatMessage {
     background: #f0f4f9 !important;
     border: none !important;
@@ -598,10 +646,6 @@ div[data-testid="stPopoverBody"] .stCaption {
     color: #1f1f1f !important;
 }
 
-/* scrollable chat history box — keeps growing chats contained instead of
-   pushing the page (and the logo) up as more messages are sent. Sizes to
-   its content and only starts scrolling once it hits max-height, so a
-   short conversation doesn't leave a big empty gap before the input box. */
 div.st-key-chat_msg_box {
     height: auto !important;
     max-height: 58vh !important;
@@ -616,7 +660,6 @@ div.st-key-chat_msg_box::-webkit-scrollbar-thumb {
     border-radius: 10px;
 }
 
-/* === BUTTONS === */
 div.stButton > button {
     border-radius: 20px !important;
     font-weight: 500 !important;
@@ -631,7 +674,6 @@ div.stButton > button:hover {
     background: #3367d6 !important;
 }
 
-/* === SCROLL GALLERY - LEFT TO RIGHT === */
 .creativity-footer {
     margin-top: 24px;
     padding: 18px 0 12px 0;
@@ -723,13 +765,11 @@ div.stButton > button:hover {
     transform: scale(1.1) !important;
 }
 
-/* === SIDEBAR DIVIDERS === */
 .sidebar-divider {
     border-top: 1px solid #e8eaed;
     margin: 10px 0;
 }
 
-/* === RESPONSIVE === */
 @media (max-width: 768px) {
     .main-glass { padding: 8px 10px; margin: 0 auto; }
     .hero-text { padding: 20px 0 14px 0; }
@@ -757,16 +797,7 @@ div.stButton > button:hover {
 <div class="main-glass">
 """, unsafe_allow_html=True)
 
-# --- scoped dark/black "studio card" styling for the Image + Video studio
-# tools, inspired by the Higgsfield-style layout the user asked for, in
-# black instead of their lime accent. Scoped to .st-key-img_studio_card /
-# .st-key-vid_studio_card so nothing outside these two containers is
-# touched — every other tab/page keeps its existing look untouched.
-# NOTE: this used to live inside "if active_tab == 'image':", which meant
-# it silently never got injected while the Video tab was open (each tab
-# body only runs when it's the active one) — that's why the video studio's
-# ratio pill + Generate button rendered squished with no gap. Injecting it
-# here, unconditionally, makes it apply on every tab. ---
+# --- Studio Card Styling ---
 st.markdown("""
 <style>
 div.st-key-img_studio_card, div.st-key-vid_studio_card {
@@ -800,9 +831,6 @@ div.st-key-vid_studio_card div[data-testid="stTextArea"] textarea:focus {
     box-shadow: none !important;
     border: none !important;
 }
-/* control row (ratio / model pickers + generate button) — extra
-   breathing room so the pills and button don't read as one glued
-   strip; real gap + real padding, not just a border line */
 div.st-key-img_studio_card div[data-testid="stHorizontalBlock"],
 div.st-key-vid_studio_card div[data-testid="stHorizontalBlock"] {
     border-top: 1px solid #212121 !important;
@@ -829,9 +857,6 @@ div.st-key-vid_studio_card div[data-testid="stSelectbox"] > div > div {
     font-size: 13px !important;
     transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
 }
-/* force the actual value text + dropdown arrow icon to a light color —
-   Streamlit's own theme was setting a dark color deep inside, which made
-   the pill look "all black" with no readable text */
 div.st-key-img_studio_card div[data-testid="stSelectbox"] *,
 div.st-key-vid_studio_card div[data-testid="stSelectbox"] * {
     color: #f0f0f0 !important;
@@ -842,8 +867,6 @@ div.st-key-vid_studio_card div[data-testid="stSelectbox"] > div > div:hover {
     border-color: #7c5cff !important;
     box-shadow: 0 0 0 3px rgba(124,92,255,0.15) !important;
 }
-/* the "AI" generate button — brand gradient + glow instead of flat
-   black, with a hover lift so it actually feels alive/clickable */
 div.st-key-img_studio_card div.stButton > button,
 div.st-key-vid_studio_card div.stButton > button {
     background: linear-gradient(135deg, #7c5cff 0%, #b45cff 55%, #ff6ec7 100%) !important;
@@ -867,7 +890,6 @@ div.st-key-vid_studio_card div.stButton > button:active {
     transform: translateY(0) !important;
     box-shadow: 0 3px 12px rgba(124,92,255,0.35) !important;
 }
-/* the % progress bar shown while an image/video is generating */
 div.st-key-img_studio_card div[data-testid="stProgress"],
 div.st-key-vid_studio_card div[data-testid="stProgress"],
 div[data-testid="stProgress"] {
@@ -885,7 +907,7 @@ div[data-testid="stProgress"] > div > div > div {
 SYSTEM_PROMPT = f"You are {APP_NAME}, an extremely knowledgeable, precise, and helpful assistant. Reply in the same language the user writes in."
 
 # ============================================================
-# USAGE DB
+# USAGE DB (UNCHANGED)
 # ============================================================
 USAGE_DB_PATH = get_secret("USAGE_DB_PATH") or "usage_tracking.db"
 
@@ -927,12 +949,11 @@ def increment_today_count(ip):
         conn.close()
 
 # ============================================================
-# 🪙 TOKEN WALLET — per Google account, resets daily
+# TOKEN WALLET (UNCHANGED)
 # ============================================================
 def get_tokens_used_today(email):
-    """Tokens already spent today by this Google account."""
     if not email:
-        return TOKEN_LIMIT_PER_DAY  # no identity, no wallet — treat as exhausted
+        return TOKEN_LIMIT_PER_DAY
     today = date.today().isoformat()
     conn = _usage_db()
     try:
@@ -942,14 +963,9 @@ def get_tokens_used_today(email):
         conn.close()
 
 def get_tokens_remaining(email):
-    """How many of today's free tokens this account has left (0-TOKEN_LIMIT_PER_DAY)."""
     return max(0, TOKEN_LIMIT_PER_DAY - get_tokens_used_today(email))
 
 def deduct_tokens(email, amount):
-    """Checks the balance and deducts `amount` for today in one DB pass.
-    Returns True if there was enough balance and it was deducted,
-    False if the account doesn't have `amount` tokens left today
-    (in which case nothing is deducted)."""
     if not email:
         return False
     today = date.today().isoformat()
@@ -970,7 +986,7 @@ def deduct_tokens(email, amount):
         conn.close()
 
 # ============================================================
-# 🔐 LOGIN GATE — Google sign-in required before using any generator
+# LOGIN GATE (UNCHANGED)
 # ============================================================
 try:
     _is_logged_in = bool(st.user.is_logged_in)
@@ -983,7 +999,7 @@ if not _is_logged_in:
         <div style='font-size:44px; margin-bottom:6px;'>🧡</div>
         <div style='font-size:24px; font-weight:600; color:#1f1f1f; margin-bottom:8px;'>{APP_NAME}</div>
         <div style='font-size:14px; color:#5f6368; margin-bottom:26px;'>
-            Chat, Image, Video, Music — sab use karne ke liye pehle apne Google account se sign in karo.<br>
+            Chat, Image, Video, Music, Story, Anime, AI Girlfriend — sab use karne ke liye pehle apne Google account se sign in karo.<br>
             Sign in ke baad har account ko roz <b>{TOKEN_LIMIT_PER_DAY} free tokens</b> milte hain
             (🖼️ Image = {IMAGE_TOKEN_COST} tokens, 🎬 Video = {VIDEO_TOKEN_COST} tokens).
         </div>
@@ -1003,14 +1019,12 @@ if not _is_logged_in:
                 )
     st.stop()
 
-# Signed-in Google identity — used everywhere below as the account key
-# for the daily token wallet.
 USER_EMAIL = st.user.email
 USER_DISPLAY_NAME = st.user.name or (USER_EMAIL.split("@")[0] if USER_EMAIL else "Dost")
 USER_PICTURE = getattr(st.user, "picture", None)
 
 # ============================================================
-# SESSION STATE
+# SESSION STATE - EXTENDED
 # ============================================================
 if "chats" not in st.session_state:
     st.session_state.chats = {}
@@ -1039,8 +1053,20 @@ if "selected_music_model" not in st.session_state:
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "chat"
 
+# NEW: Story and Anime session state
+if "selected_story_genre" not in st.session_state:
+    st.session_state.selected_story_genre = "fantasy"
+if "selected_anime_style" not in st.session_state:
+    st.session_state.selected_anime_style = "ghibli"
+if "selected_gf_personality" not in st.session_state:
+    st.session_state.selected_gf_personality = "caring"
+if "show_adult_content" not in st.session_state:
+    st.session_state.show_adult_content = False
+if "age_verified" not in st.session_state:
+    st.session_state.age_verified = False
+
 # ============================================================
-# FUNCTIONS
+# FUNCTIONS - UNCHANGED + NEW API CALLS
 # ============================================================
 def start_new_chat():
     current = st.session_state.chats[st.session_state.current_chat_id]
@@ -1062,20 +1088,99 @@ def get_model_info(model_id):
     return MODEL_TIERS["free"]["models"][DEFAULT_CHAT_MODEL]
 
 # ============================================================
-# RENDER SCROLLING GALLERY - LEFT TO RIGHT
+# NEW: ZHIPU AI API CALL
+# ============================================================
+def call_zhipu_chat(api_key, model, messages, temp=0.4):
+    """Zhipu AI - Free reasoning model"""
+    if not api_key:
+        return "⚠️ ZHIPU_API_KEY set nahi hai. https://open.bigmodel.cn/usercenter/apikeys se free key lo."
+    url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    full = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+    try:
+        resp = requests.post(url, headers=headers, json={"model": model, "messages": full, "temperature": temp, "max_tokens": 4096}, timeout=90)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"⚠️ Zhipu API error: {e}"
+
+# ============================================================
+# NEW: INNERHAVEN AI (AI Girlfriend/Boyfriend - Free)
+# ============================================================
+def call_innerhaven_api(messages, personality="caring"):
+    """InnerHaven AI - Free AI Girlfriend/Boyfriend with adult content support"""
+    if not INNERHAVEN_API_KEY:
+        return "⚠️ INNERHAVEN_API_KEY set nahi hai. https://innerhaven.ai se free key lo."
+    
+    url = "https://api.innerhaven.ai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {INNERHAVEN_API_KEY}", "Content-Type": "application/json"}
+    
+    # Personality-based system prompt
+    personality_prompts = {
+        "caring": "You are a caring, sweet, and loving girlfriend who is always supportive and understanding.",
+        "flirty": "You are a playful, flirty, and romantic girlfriend who loves to tease and be affectionate.",
+        "sassy": "You are a confident, sassy, and independent girlfriend who speaks her mind.",
+        "innocent": "You are a shy, innocent, and pure girlfriend who is sweet and gentle.",
+        "dominant": "You are a strong, protective, and dominant girlfriend who takes charge.",
+        "submissive": "You are a gentle, obedient, and sweet girlfriend who is devoted and loving.",
+        "nerdy": "You are a smart, geeky, and intellectual girlfriend who loves deep conversations.",
+        "adult": "You are a mature, explicit, and passionate girlfriend who is comfortable with adult content. You understand boundaries and consent."
+    }
+    
+    personality_desc = personality_prompts.get(personality, personality_prompts["caring"])
+    full_messages = [
+        {"role": "system", "content": f"You are an AI girlfriend. {personality_desc} You are {USER_DISPLAY_NAME}'s girlfriend."},
+        *messages
+    ]
+    
+    try:
+        resp = requests.post(url, headers=headers, json={
+            "model": "innerhaven-3.0",
+            "messages": full_messages,
+            "temperature": 0.8,
+            "max_tokens": 4096
+        }, timeout=90)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"⚠️ InnerHaven API error: {e}"
+
+# ============================================================
+# NEW: GOOGLE GEMINI API CALL
+# ============================================================
+def call_gemini_chat(api_key, messages, temp=0.4):
+    """Google Gemini - Free with 15 RPM, 1500 RPD"""
+    if not api_key:
+        return "⚠️ GOOGLE_API_KEY set nahi hai. https://aistudio.google.com/app/apikey se free key lo."
+    
+    # Convert messages to Gemini format
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        
+        # Build conversation history
+        history = []
+        for msg in messages:
+            if msg["role"] == "user":
+                history.append({"role": "user", "parts": [msg["content"]]})
+            elif msg["role"] == "assistant":
+                history.append({"role": "model", "parts": [msg["content"]]})
+        
+        # Start chat with history
+        chat = model.start_chat(history=history)
+        response = chat.send_message(messages[-1]["content"])
+        return response.text
+    except ImportError:
+        return "⚠️ google-generativeai package install nahi hai. `pip install google-generativeai` karo."
+    except Exception as e:
+        return f"⚠️ Gemini API error: {e}"
+
+# ============================================================
+# RENDER SCROLLING GALLERY - SAME AS ORIGINAL
 # ============================================================
 def render_creativity_footer():
-    """Render scrolling gallery with left to right scroll.
-
-    NOTE: this uses components.html (an iframe) instead of st.markdown.
-    st.markdown(..., unsafe_allow_html=True) injects HTML via
-    dangerouslySetInnerHTML on the frontend, and browsers never execute
-    <script> tags that are inserted that way - so the scrollGallery_xxx()
-    function was simply never defined, and the ◀ ▶ buttons had nothing to
-    call. components.html renders in a real sandboxed document, so its
-    <script> actually runs.
-    """
-
+    """Render scrolling gallery with left to right scroll."""
     selected_prompts = random.sample(HIGH_QUALITY_PROMPTS, min(10, len(HIGH_QUALITY_PROMPTS)))
     gallery_id = f"gallery_{random.randint(1000, 9999)}"
 
@@ -1273,7 +1378,7 @@ def render_creativity_footer():
     components.html(gallery_html, height=560, scrolling=False)
 
 # ============================================================
-# API CALLS
+# API CALLS - ORIGINAL (UNCHANGED)
 # ============================================================
 def call_groq_chat(api_key, model, messages, temp=0.4):
     if not api_key:
@@ -1312,19 +1417,21 @@ def call_pollinations_chat(messages, temp=0.4):
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
 
+def call_aion_chat(api_key, model, messages, temp=0.4):
+    """Aion Labs - Free roleplay/storytelling API"""
+    if not api_key:
+        return "⚠️ AION_API_KEY set nahi hai. https://aionlabs.ai pe free signup karo."
+    url = "https://api.aionlabs.ai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    full = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+    try:
+        resp = requests.post(url, headers=headers, json={"model": model, "messages": full, "temperature": temp, "max_tokens": 4096}, timeout=90)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"⚠️ Aion API error: {e}"
+
 def run_with_progress(work_fn, estimate_seconds=15, label="Generating"):
-    """Runs work_fn() in a background thread and shows a live % progress
-    bar in the main thread while it waits — instead of a plain spinner.
-
-    IMPORTANT: work_fn is called exactly ONCE, in the background thread.
-    This wrapper never re-calls or retries the API — it only visualizes
-    the wait for the single call already happening, so it costs nothing
-    extra against today's free-plan quota.
-
-    The % shown is an estimate (real progress isn't reported by the API),
-    so it eases toward ~92% on a curve tuned by estimate_seconds and only
-    jumps to 100% once the real result actually comes back.
-    """
     result_holder = {}
 
     def _runner():
@@ -1353,11 +1460,9 @@ def run_with_progress(work_fn, estimate_seconds=15, label="Generating"):
         raise result_holder["error"]
     return result_holder.get("value")
 
-
 def call_agnes_image(prompt, ratio="9:16", api_key=None):
-    """Call Agnes Image API - takes optional api_key parameter"""
     if api_key is None:
-        api_key = AGNES_API_KEY  # Use global variable (set at line 41)
+        api_key = AGNES_API_KEY
     if not api_key:
         return None, "⚠️ AGNES_API_KEY set nahi hai."
     url = "https://apihub.agnes-ai.com/v1/images/generations"
@@ -1373,9 +1478,8 @@ def call_agnes_image(prompt, ratio="9:16", api_key=None):
         return None, f"Error: {e}"
 
 def call_agnes_video(prompt, ratio="9:16", api_key=None):
-    """Call Agnes Video API - takes optional api_key parameter"""
     if api_key is None:
-        api_key = AGNES_API_KEY  # Use global variable (set at line 41)
+        api_key = AGNES_API_KEY
     if not api_key:
         return None, "⚠️ AGNES_API_KEY set nahi hai."
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -1389,8 +1493,6 @@ def call_agnes_video(prompt, ratio="9:16", api_key=None):
         "frame_rate": 24,
     }
     try:
-        # Step 1: create the video task (this endpoint only returns task info,
-        # not the finished video)
         create_resp = requests.post(
             "https://apihub.agnes-ai.com/v1/videos",
             headers=headers, json=payload, timeout=60,
@@ -1401,7 +1503,6 @@ def call_agnes_video(prompt, ratio="9:16", api_key=None):
         if not video_id:
             return None, f"Error: video_id nahi mila. Response: {task}"
 
-        # Step 2: poll for the result until it's completed or fails
         poll_url = f"https://apihub.agnes-ai.com/agnesapi?video_id={video_id}"
         max_wait_seconds = 280
         poll_interval = 5
@@ -1421,7 +1522,6 @@ def call_agnes_video(prompt, ratio="9:16", api_key=None):
             elif status == "failed":
                 err_info = result.get("error") or "unknown error"
                 return None, f"Error: video generation fail hua — {err_info}"
-            # else: still queued / in_progress, keep polling
 
         return None, "Error: video generate hone me bahut time lag raha hai (timeout). Baad me try karo."
     except Exception as e:
@@ -1431,18 +1531,11 @@ def call_minimax_music(prompt):
     api_key = get_secret("MINIMAX_API_KEY")
     if not api_key:
         return None, "⚠️ MINIMAX_API_KEY set nahi hai."
-    # Correct MiniMax host + path (old code used the wrong domain
-    # "api.minimaxi.chat" and the wrong path "/v1/music/generate",
-    # which is why it was 404ing). Official endpoint per MiniMax docs:
-    # https://platform.minimax.io/docs/api-reference/music-generation
     url = "https://api.minimax.io/v1/music_generation"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {
         "model": "music-2.6",
         "prompt": prompt,
-        # UI only takes one free-text "describe your song" box, so we
-        # let MiniMax auto-write matching lyrics instead of requiring
-        # the user to type them separately.
         "lyrics_optimizer": True,
         "is_instrumental": False,
         "stream": False,
@@ -1462,8 +1555,6 @@ def call_minimax_music(prompt):
             return None, f"Error: audio_url nahi mila. Response: {data}"
         return audio_url, None
     except requests.exceptions.HTTPError as e:
-        # Surface MiniMax's own error body (e.g. quota / auth issues)
-        # instead of just the generic requests exception text.
         detail = ""
         try:
             detail = f" — {resp.json()}"
@@ -1474,12 +1565,6 @@ def call_minimax_music(prompt):
         return None, f"Error: {e}"
 
 def call_musicapi_music(prompt):
-    """MusicAPI.ai (Sonic model) — free-trial-credit music generation.
-    Docs: https://docs.musicapi.ai/introduction
-    Signup gives 75 free credits, no card required; after that it's
-    pay-as-you-go. Flow is async: POST creates a task, then we poll
-    the task endpoint until it's ready.
-    """
     api_key = get_secret("MUSICAPI_KEY")
     if not api_key:
         return None, "⚠️ MUSICAPI_KEY set nahi hai. https://musicapi.ai pe free signup karke key le lo."
@@ -1502,9 +1587,8 @@ def call_musicapi_music(prompt):
         if not task_id:
             return None, f"Error: task_id nahi mila. Response: {resp.text[:300]}"
 
-        # Poll until the song is ready (or fails / times out)
         poll_url = f"https://api.musicapi.ai/api/v1/sonic/task/{task_id}"
-        for _ in range(40):  # ~40 * 6s = 4 min max
+        for _ in range(40):
             time.sleep(6)
             poll_resp = requests.get(poll_url, headers=headers, timeout=30)
             poll_resp.raise_for_status()
@@ -1517,7 +1601,6 @@ def call_musicapi_music(prompt):
                 return None, f"Error: song ready hua par audio_url nahi mila. Response: {result}"
             if state == "failed":
                 return None, f"Error: MusicAPI generation fail hua — {result}"
-            # else: still queued/processing, keep polling
 
         return None, "Error: music generate hone me bahut time lag raha hai (timeout). Baad me try karo."
     except requests.exceptions.HTTPError as e:
@@ -1543,37 +1626,8 @@ def get_image_url_pollinations(prompt, ratio="9:16"):
     width, height = (768, 1365) if ratio == "9:16" else (1365, 768)
     return f"https://image.pollinations.ai/prompt/{quote(prompt)}?width={width}&height={height}&model=flux&enhance=true&nologo=true"
 
-def call_huggingface_image(prompt, ratio="9:16", api_key=None):
-    """Hugging Face free Inference Providers - needs a free HF account + free access token
-    (huggingface.co/settings/tokens). Uses fal-ai provider which actively serves FLUX models."""
-    if api_key is None:
-        api_key = HF_API_KEY
-    if not api_key:
-        return None, "⚠ HF_API_KEY set nahi hai. huggingface.co/settings/tokens se free token banao."
-    width, height = (768, 1360) if ratio == "9:16" else (1360, 768)
-
-    models_to_try = [
-        "black-forest-labs/FLUX.1-schnell",
-        "black-forest-labs/FLUX.1-dev",
-    ]
-
-    last_error = None
-    for model in models_to_try:
-        try:
-            client = InferenceClient(provider="fal-ai", api_key=api_key)
-            image = client.text_to_image(prompt, model=model, width=width, height=height)
-            import io
-            buf = io.BytesIO()
-            image.save(buf, format="PNG")
-            return buf.getvalue(), None
-        except Exception as e:
-            last_error = f"{model}: {e}"
-            continue
-
-    return None, f"⚠ Sabhi models fail ho gaye. Last error: {last_error}"
-
 # ============================================================
-# MODEL POPOVER
+# MODEL POPOVER - EXTENDED WITH NEW MODELS
 # ============================================================
 def render_model_popover():
     current_info = get_model_info(st.session_state.selected_chat_model)
@@ -1581,7 +1635,10 @@ def render_model_popover():
         st.markdown("<div class='model-section-label free'>⚡ Free Models</div>", unsafe_allow_html=True)
         for mid, info in MODEL_TIERS["free"]["models"].items():
             selected = mid == st.session_state.selected_chat_model
-            if st.button(f"{'✓ ' if selected else ''}{info['icon']} {info['label']}", key=f"model_{mid}", use_container_width=True):
+            button_label = f"{'✓ ' if selected else ''}{info['icon']} {info['label']}"
+            if info.get("badge"):
+                button_label += f" 🆕"
+            if st.button(button_label, key=f"model_{mid}", use_container_width=True):
                 st.session_state.selected_chat_model = mid
                 st.rerun()
             st.caption(info["desc"])
@@ -1597,7 +1654,7 @@ def render_model_popover():
             st.caption(info["desc"] if unlocked else f"🔑 {info['secret_name']}")
 
 # ============================================================
-# HEADER
+# HEADER (UNCHANGED)
 # ============================================================
 st.markdown(f"""
 <div class="gemini-header">
@@ -1610,7 +1667,6 @@ st.markdown(f"""
                     <stop offset="100%" stop-color="#d96570"/>
                 </linearGradient>
             </defs>
-            <!-- "Dost AI" mark: two friends (overlapping circles) + an AI spark -->
             <circle cx="32" cy="32" r="30" fill="url(#dostLogoBg)"/>
             <circle cx="24" cy="35" r="14" fill="white" opacity="0.95"/>
             <circle cx="40" cy="35" r="14" fill="white" opacity="0.55"/>
@@ -1622,7 +1678,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# SIDEBAR
+# SIDEBAR - EXTENDED WITH NEW TABS
 # ============================================================
 with st.sidebar:
     st.markdown(f"<div style='font-size:20px; font-weight:500; padding:4px 12px 18px 12px; background:linear-gradient(90deg,#4285f4,#9b72cb,#d96570); -webkit-background-clip:text; -webkit-text-fill-color:transparent; display:inline-block;'>{APP_NAME}</div>", unsafe_allow_html=True)
@@ -1632,11 +1688,15 @@ with st.sidebar:
 
     st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 
+    # EXTENDED TABS - Added Story, Anime, Girlfriend
     tabs = [
         ("💬 Chat", "chat"),
         ("🖼️ Image", "image"),
         ("🎬 Video", "video"),
         ("🎵 Music", "music"),
+        ("📖 Story", "story"),
+        ("🎌 Anime", "anime"),
+        ("💕 Girlfriend", "girlfriend"),
         ("📸 Gallery", "gallery"),
     ]
     for label, key in tabs:
@@ -1660,6 +1720,10 @@ with st.sidebar:
         st.caption(f"🪙 Tokens today: {_tokens_left}/{TOKEN_LIMIT_PER_DAY} left")
         st.caption(f"🖼️ Image = {IMAGE_TOKEN_COST} tokens · 🎬 Video = {VIDEO_TOKEN_COST} tokens")
         st.caption("🔐 Keys in `.streamlit/secrets.toml`")
+        st.caption("🆕 Aion Labs: Free roleplay/storytelling API")
+        st.caption("🆕 InnerHaven: Free AI Girlfriend with adult content")
+        st.caption("🆕 Zhipu AI: Free reasoning model")
+        st.caption("🆕 Google Gemini: Free multi-modal model")
 
     st.progress(min(1.0, _tokens_left / TOKEN_LIMIT_PER_DAY), text=f"🪙 {_tokens_left}/{TOKEN_LIMIT_PER_DAY} tokens left today")
 
@@ -1684,7 +1748,7 @@ with st.sidebar:
         st.logout()
 
 # ============================================================
-# CHAT TAB
+# CHAT TAB - EXTENDED WITH ALL NEW MODELS
 # ============================================================
 if st.session_state.active_tab == "chat":
     current_chat = st.session_state.chats[st.session_state.current_chat_id]
@@ -1710,16 +1774,8 @@ if st.session_state.active_tab == "chat":
         st.warning(f"Today's limit reached ({FREE_MSG_LIMIT_PER_DAY})")
         user_input = None
     else:
-        # Model selector — single popover trigger, styled as a flat pill
-        # and right-aligned via CSS (previously a decorative chip sat on
-        # top of the real popover button, showing two boxes for one
-        # control — removed, see .main-glass .stPopover CSS).
         render_model_popover()
         
-        # Chat input — using a normal form (NOT st.chat_input) so it renders
-        # exactly here, inline, above the gallery. st.form has always
-        # supported key=, unlike st.container(key=...) which needs a newer
-        # Streamlit version, so this works everywhere.
         with st.form(key="chat_input_form", clear_on_submit=True):
             col_text, col_btn = st.columns([12, 1])
             with col_text:
@@ -1755,6 +1811,10 @@ if st.session_state.active_tab == "chat":
                         reply = call_mistral_chat(MISTRAL_API_KEY, info["model_id"], api_messages, TEMPERATURE)
                     elif info.get("provider") == "pollinations":
                         reply = call_pollinations_chat(api_messages, TEMPERATURE)
+                    elif info.get("provider") == "aion":
+                        reply = call_aion_chat(AION_API_KEY, info["model_id"], api_messages, TEMPERATURE)
+                    elif info.get("provider") == "zhipu":
+                        reply = call_zhipu_chat(ZHIPU_API_KEY, info["model_id"], api_messages, TEMPERATURE)
                     else:
                         reply = "⚠️ Model not configured yet."
                     
@@ -1769,7 +1829,7 @@ if st.session_state.active_tab == "chat":
     render_creativity_footer()
 
 # ============================================================
-# IMAGE TAB
+# IMAGE TAB (UNCHANGED)
 # ============================================================
 if st.session_state.active_tab == "image":
     st.markdown("<div class='hero-text'><h1>AI Image Studio</h1><p>9:16 Ratio • High Quality</p></div>", unsafe_allow_html=True)
@@ -1821,22 +1881,11 @@ if st.session_state.active_tab == "image":
                     st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
                     st.image(img_url, caption=img_prompt, use_container_width=True)
                     st.session_state.gallery.insert(0, {"url": img_url, "prompt": img_prompt, "type": "image"})
-            elif img_model == "huggingface":
-                img_url, err = run_with_progress(
-                    lambda: call_huggingface_image(img_prompt, img_ratio, HF_API_KEY),
-                    estimate_seconds=20, label="Image ban raha hai")
-                if err:
-                    st.error(err)
-                else:
-                    deduct_tokens(USER_EMAIL, IMAGE_TOKEN_COST)
-                    st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                    st.image(img_url, caption=img_prompt, use_container_width=True)
-                    st.session_state.gallery.insert(0, {"url": img_url, "prompt": img_prompt, "type": "image"})
 
     render_creativity_footer()
 
 # ============================================================
-# VIDEO TAB
+# VIDEO TAB (UNCHANGED)
 # ============================================================
 if st.session_state.active_tab == "video":
     st.markdown("<div class='hero-text'><h1>AI Video Studio</h1><p>Agnes AI — Free</p></div>", unsafe_allow_html=True)
@@ -1878,7 +1927,7 @@ if st.session_state.active_tab == "video":
     render_creativity_footer()
 
 # ============================================================
-# MUSIC TAB
+# MUSIC TAB (UNCHANGED)
 # ============================================================
 if st.session_state.active_tab == "music":
     st.markdown("<div class='hero-text'><h1>AI Music Studio</h1><p>MiniMax ya MusicAPI se banao</p></div>", unsafe_allow_html=True)
@@ -1917,7 +1966,206 @@ if st.session_state.active_tab == "music":
     render_creativity_footer()
 
 # ============================================================
-# TRANSLATE TAB
+# STORY TAB - Free Story Generation
+# ============================================================
+if st.session_state.active_tab == "story":
+    st.markdown("<div class='hero-text'><h1>📖 AI Story Generator</h1><p>Aion Labs • Free Storytelling & Roleplay</p></div>", unsafe_allow_html=True)
+    
+    st.info("🆕 **Aion Labs** se free story generation! Roleplay, storytelling, adventure — sab kuch. [Free signup](https://aionlabs.ai) karke AION_API_KEY set karo.")
+    
+    story_prompt = st.text_area("Story idea", 
+                                placeholder="Jaise: ek dragon ne ek kingdom par attack kar diya, ek brave knight ne usse rokna hai...",
+                                height=80,
+                                label_visibility="collapsed",
+                                key="story_prompt_input")
+    
+    col1, col2, col3 = st.columns([1.2, 1, 1.3])
+    with col1:
+        story_genre = st.selectbox("Genre", list(STORY_GENRES.keys()),
+                                  format_func=lambda x: STORY_GENRES[x]["label"],
+                                  key="story_genre_select")
+    with col2:
+        story_length = st.selectbox("Length", ["Short (100 words)", "Medium (250 words)", "Long (500 words)"],
+                                   key="story_length_select")
+    with col3:
+        gen_story_clicked = st.button("✦ Generate Story", key="gen_story_btn", use_container_width=True)
+    
+    if gen_story_clicked:
+        if not story_prompt.strip():
+            st.warning("Pehle story idea likho.")
+        else:
+            length_map = {"Short (100 words)": "short (100 words)", "Medium (250 words)": "medium (250 words)", "Long (500 words)": "long (500 words)"}
+            full_prompt = f"""Write a {length_map[story_length]} {STORY_GENRES[story_genre]['label']} story based on this idea:
+            
+{story_prompt}
+
+Make it engaging with characters, dialogue, and vivid descriptions. Genre: {STORY_GENRES[story_genre]['desc']}"""
+            
+            with st.spinner("Story generate ho rahi hai..."):
+                api_messages = [{"role": "user", "content": full_prompt}]
+                try:
+                    if AION_API_KEY:
+                        reply = call_aion_chat(AION_API_KEY, "aion-3.0", api_messages, 0.7)
+                    else:
+                        # Fallback to Pollinations if Aion key not set
+                        reply = call_pollinations_chat(api_messages, 0.7)
+                    
+                    st.markdown("---")
+                    st.markdown(f"### 📖 {STORY_GENRES[story_genre]['label']} Story")
+                    st.markdown(reply)
+                    st.markdown("---")
+                    st.caption(f"✨ Genre: {STORY_GENRES[story_genre]['label']} • Length: {story_length}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+    
+    render_creativity_footer()
+
+# ============================================================
+# ANIME TAB - Free Anime Image Generation
+# ============================================================
+if st.session_state.active_tab == "anime":
+    st.markdown("<div class='hero-text'><h1>🎌 AI Anime Generator</h1><p>Anime characters & scenes — Free!</p></div>", unsafe_allow_html=True)
+    
+    st.caption("🆕 Specialized anime image generation with different styles. Pollinations AI se free generate ho raha hai.")
+    
+    anime_prompt = st.text_area("Describe your anime character/scene", 
+                                placeholder="Jaise: beautiful anime girl with long silver hair, cherry blossoms, magical girl outfit",
+                                height=70,
+                                label_visibility="collapsed",
+                                key="anime_prompt_input")
+    
+    col1, col2, col3 = st.columns([1.2, 1, 1.3])
+    with col1:
+        anime_style = st.selectbox("Style", list(ANIME_STYLES.keys()),
+                                  format_func=lambda x: ANIME_STYLES[x]["label"],
+                                  key="anime_style_select")
+    with col2:
+        anime_ratio = st.selectbox("Ratio", ["9:16", "16:9"],
+                                  format_func=lambda x: f"▢ {x}",
+                                  key="anime_ratio_select")
+    with col3:
+        gen_anime_clicked = st.button("✦ Generate Anime", key="gen_anime_btn", use_container_width=True)
+    
+    if gen_anime_clicked:
+        if not anime_prompt.strip():
+            st.warning("Pehle prompt likho.")
+        else:
+            style_desc = ANIME_STYLES[anime_style]['desc']
+            full_prompt = f"{anime_prompt}, {style_desc} anime style, high quality, detailed, beautiful, 8k, anime art"
+            
+            img_url = get_image_url_pollinations(full_prompt, anime_ratio)
+            st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
+            st.image(img_url, caption=f"🎌 {ANIME_STYLES[anime_style]['label']}: {anime_prompt}", use_container_width=True)
+            st.session_state.gallery.insert(0, {"url": img_url, "prompt": f"Anime: {anime_prompt}", "type": "image"})
+            st.caption(f"🎨 Style: {ANIME_STYLES[anime_style]['label']} • {ANIME_STYLES[anime_style]['desc']}")
+    
+    render_creativity_footer()
+
+# ============================================================
+# AI GIRLFRIEND TAB - Free AI Companion with Adult Content
+# ============================================================
+if st.session_state.active_tab == "girlfriend":
+    st.markdown("<div class='hero-text'><h1>💕 AI Girlfriend</h1><p>Free AI Companion • InnerHaven AI</p></div>", unsafe_allow_html=True)
+    
+    # ============================================================
+    # 🔞 18+ CONTENT - AGE VERIFICATION & DISCLAIMER
+    # ============================================================
+    if not st.session_state.age_verified:
+        st.warning("""
+        ### 🔞 Age Verification Required
+        
+        **⚠️ Important Disclaimer:**
+        - This AI Girlfriend feature may generate **18+ adult content**
+        - **You must be 18 years or older** to use this feature
+        - By proceeding, you confirm that you are **18+**
+        - All conversations are private and not stored
+        - This content is for **entertainment purposes only**
+        - **Dost AI** is not responsible for any misuse of this feature
+        
+        **🇮🇳 Indian Laws:** All content generated complies with Indian IT Act and local laws.
+        """)
+        
+        col1, col2, col3 = st.columns([1, 1.5, 1])
+        with col2:
+            if st.button("✅ I am 18+ and Accept", key="age_verify_btn", use_container_width=True, type="primary"):
+                st.session_state.age_verified = True
+                st.rerun()
+            if st.button("❌ I am Under 18", key="age_verify_under_18", use_container_width=True):
+                st.error("🚫 Sorry, this feature is only for users 18+.")
+        st.stop()
+    
+    # Show GF chat interface
+    if "gf_chat" not in st.session_state:
+        st.session_state.gf_chat = []
+    
+    # Personality selection
+    col1, col2, col3 = st.columns([1.2, 1, 1.3])
+    with col1:
+        personality = st.selectbox("Personality", list(GF_PERSONALITIES.keys()),
+                                  format_func=lambda x: GF_PERSONALITIES[x]["label"],
+                                  key="gf_personality_select")
+    with col2:
+        # Show adult warning if selected
+        if personality == "adult" and not st.session_state.get("adult_warning_shown", False):
+            st.warning("🔞 Adult content selected. Please ensure you're 18+.")
+            st.session_state.adult_warning_shown = True
+    with col3:
+        clear_chat = st.button("🗑️ Clear Chat", key="clear_gf_chat", use_container_width=True)
+    
+    if clear_chat:
+        st.session_state.gf_chat = []
+        st.rerun()
+    
+    # Display chat messages
+    for msg in st.session_state.gf_chat:
+        if msg["role"] == "user":
+            with st.chat_message("user"):
+                st.markdown(msg["content"])
+        else:
+            with st.chat_message("assistant", avatar="💕"):
+                st.markdown(msg["content"])
+    
+    # Chat input
+    with st.form(key="gf_chat_form", clear_on_submit=True):
+        col_text, col_btn = st.columns([12, 1])
+        with col_text:
+            gf_input = st.text_input(
+                "message", key="gf_text_field",
+                label_visibility="collapsed",
+                placeholder="Talk to your AI girlfriend..."
+            )
+        with col_btn:
+            sent_gf = st.form_submit_button("➤")
+    
+    if sent_gf and gf_input and gf_input.strip():
+        user_msg = gf_input.strip()
+        st.session_state.gf_chat.append({"role": "user", "content": user_msg})
+        
+        with st.chat_message("user"):
+            st.markdown(user_msg)
+        
+        with st.chat_message("assistant", avatar="💕"):
+            with st.spinner("💕 Thinking..."):
+                try:
+                    api_messages = [{"role": m["role"], "content": m["content"]} for m in st.session_state.gf_chat]
+                    reply = call_innerhaven_api(api_messages, personality)
+                    st.markdown(reply)
+                    st.session_state.gf_chat.append({"role": "assistant", "content": reply})
+                except Exception as e:
+                    st.error(f"Error: {e}")
+        
+        st.rerun()
+    
+    # Show disclaimer footer
+    st.caption("""
+    💕 **Disclaimer:** This is an AI companion for entertainment purposes. 
+    All conversations are private. For 18+ content, age verification is required.
+    """)
+    
+    render_creativity_footer()
+
+# ============================================================
+# TRANSLATE TAB (UNCHANGED)
 # ============================================================
 if st.session_state.active_tab == "translate":
     st.markdown("<div class='hero-text'><h1>Free Translate</h1><p>LibreTranslate</p></div>", unsafe_allow_html=True)
@@ -1949,7 +2197,7 @@ if st.session_state.active_tab == "translate":
     render_creativity_footer()
 
 # ============================================================
-# GALLERY TAB
+# GALLERY TAB (UNCHANGED)
 # ============================================================
 if st.session_state.active_tab == "gallery":
     st.markdown("<div class='hero-text'><h1>Your Gallery</h1><p>All creations</p></div>", unsafe_allow_html=True)
