@@ -1549,10 +1549,8 @@ def call_pollinations_chat(messages, temp=0.4):
     return resp.json()["choices"][0]["message"]["content"]
 
 def call_aion_chat(api_key, model, messages, temp=0.4):
-    """Aion Labs - Free roleplay/storytelling API"""
-    if not api_key:
-        return "⚠️ AION_API_KEY set nahi hai. https://aionlabs.ai pe free signup karo."
-    url = "https://api.aionlabs.ai/v1/chat/completions"
+    """Dost Ai - Free roleplay/storytelling"""
+    
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     full = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
     try:
