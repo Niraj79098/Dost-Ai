@@ -1104,14 +1104,17 @@ def get_model_info(model_id):
 # (HTTP 410) kar diya hai. Ab sab kuch "Inference Providers" ke through
 # "router.huggingface.co" se hota hai. Isliye huggingface_hub client use
 # kar rahe hai jo naya routing khud handle karta hai.
+# Order matters: cheapest/free-tier-friendliest first. provider="auto" lets HF
+# pick whichever backend actually serves each model right now (hf-inference
+# often no longer hosts heavy generative models on its free CPU tier).
 IMAGE_MODEL_FALLBACKS = [
     "black-forest-labs/FLUX.1-schnell",
-    "stabilityai/stable-diffusion-3-medium-diffusers",
-    "stabilityai/stable-diffusion-xl-base-1.0",
+    "stabilityai/stable-diffusion-3.5-large-turbo",
+    "black-forest-labs/FLUX.1-dev",
 ]
 
 def call_huggingface_image(prompt, ratio="9:16"):
-    """Hugging Face - Free image generation via HF Inference Providers (router.huggingface.co)"""
+    """Hugging Face - Image generation via HF Inference Providers (router.huggingface.co)"""
     if not HUGGINGFACE_TOKEN:
         return None, "⚠️ HUGGINGFACE_TOKEN set nahi hai. https://huggingface.co/settings/tokens se free token lo (naya token banate waqt 'Inference Providers' permission zaroor tick karo)."
 
@@ -1119,9 +1122,10 @@ def call_huggingface_image(prompt, ratio="9:16"):
         return None, "⚠️ 'huggingface_hub' package install nahi hai. requirements.txt me 'huggingface_hub>=0.28.0' add karo aur redeploy karo."
 
     width, height = (768, 1365) if ratio == "9:16" else (1365, 768)
-    client = InferenceClient(provider="hf-inference", api_key=HUGGINGFACE_TOKEN)
+    client = InferenceClient(provider="auto", api_key=HUGGINGFACE_TOKEN)
 
     last_error = None
+    credits_exhausted = False
     for model in IMAGE_MODEL_FALLBACKS:
         for attempt in range(2):  # ek retry, model "cold start" ho sakta hai
             try:
@@ -1142,10 +1146,22 @@ def call_huggingface_image(prompt, ratio="9:16"):
                 if status == 503:  # model load ho raha hai, thoda ruk kar retry
                     time.sleep(15)
                     continue
+                if status == 402 or "credit" in last_error.lower() or "exceeded" in last_error.lower():
+                    credits_exhausted = True
                 break  # doosri error ho to agla model try karo
             except Exception as e:
                 last_error = str(e)
                 break
+
+    if credits_exhausted:
+        return None, (
+            "⚠️ Hugging Face ke free account me Inference credits khatam ho gaye hain "
+            "(free tier me har mahine sirf ~$0.10 milte hain, jo image/video generation ke liye "
+            "bahut kam hai). Isko theek karne ke 2 tarike hain: (1) https://huggingface.co/pricing "
+            "par PRO ($9/month, $2 credits) lo, ya (2) 'Pollinations' model use karo jo hamari app me "
+            "already free hai aur credit-limited nahi hai — Image tab me 'Hugging Face (Flux)' ki jagah "
+            "'Pollinations' select karo."
+        )
 
     return None, f"⚠️ Hugging Face image generation abhi fail ho raha hai. Detail: {last_error}"
 
@@ -1186,9 +1202,11 @@ def call_huggingface_video(prompt, ratio="9:16"):
 
     return None, (
         "⚠️ Hugging Face par ab free text-to-video available nahi hai — HF ne purana "
-        "free video API band kar diya hai. Video generation ab sirf paid providers "
-        "(fal-ai, Replicate, etc.) se milta hai, jisko https://huggingface.co/settings/inference-providers "
-        "par jaake connect/billing enable karna padta hai. "
+        "free video API band kar diya hai. Ab video sirf paid providers (fal-ai, Replicate, etc.) "
+        "se milta hai, aur free HF account me sirf ~$0.10/month credits hote hain (video ke liye "
+        "nakaafi). Options: (1) https://huggingface.co/pricing par PRO ($9/month) lo, ya "
+        "(2) https://huggingface.co/settings/inference-providers par jaake apni khud ki provider "
+        "API key (jaise fal.ai ka free-trial key) connect karo. "
         f"Detail: {last_error}"
     )
 
