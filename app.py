@@ -278,7 +278,6 @@ GF_PERSONALITIES = {
     "dominant": {"label": "👑 Dominant", "desc": "Strong, protective, bossy"},
     "submissive": {"label": "🌹 Submissive", "desc": "Gentle, obedient, sweet"},
     "nerdy": {"label": "🤓 Nerdy", "desc": "Smart, geeky, intellectual"},
-    "adult": {"label": "🔞 Adult 18+", "desc": "Mature, explicit content (age verified only)"},
 }
 
 # ============================================================
@@ -1070,10 +1069,6 @@ if "selected_anime_style" not in st.session_state:
     st.session_state.selected_anime_style = "ghibli"
 if "selected_gf_personality" not in st.session_state:
     st.session_state.selected_gf_personality = "caring"
-if "show_adult_content" not in st.session_state:
-    st.session_state.show_adult_content = False
-if "age_verified" not in st.session_state:
-    st.session_state.age_verified = False
 
 # ============================================================
 # FUNCTIONS - UNCHANGED + NEW API CALLS
@@ -1228,44 +1223,61 @@ def call_zhipu_chat(api_key, model, messages, temp=0.4):
         return f"⚠️ Zhipu API error: {e}"
 
 # ============================================================
-# NEW: INNERHAVEN AI (AI Girlfriend/Boyfriend - Free)
+# AI COMPANION CHAT - friendly/caring only, no explicit content
+# Uses existing working providers (Groq -> Cerebras -> Mistral -> Pollinations)
 # ============================================================
-def call_innerhaven_api(messages, personality="caring"):
-    """InnerHaven AI - Free AI Girlfriend/Boyfriend with adult content support"""
-    if not INNERHAVEN_API_KEY:
-        return "⚠️ INNERHAVEN_API_KEY set nahi hai. https://innerhaven.ai se free key lo."
-    
-    url = "https://api.innerhaven.ai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {INNERHAVEN_API_KEY}", "Content-Type": "application/json"}
-    
+def call_companion_chat(messages, personality="caring"):
+    """Friendly AI companion chat. Keeps things warm and caring, never explicit."""
     personality_prompts = {
-        "caring": "You are a caring, sweet, and loving girlfriend who is always supportive and understanding.",
-        "flirty": "You are a playful, flirty, and romantic girlfriend who loves to tease and be affectionate.",
-        "sassy": "You are a confident, sassy, and independent girlfriend who speaks her mind.",
-        "innocent": "You are a shy, innocent, and pure girlfriend who is sweet and gentle.",
-        "dominant": "You are a strong, protective, and dominant girlfriend who takes charge.",
-        "submissive": "You are a gentle, obedient, and sweet girlfriend who is devoted and loving.",
-        "nerdy": "You are a smart, geeky, and intellectual girlfriend who loves deep conversations.",
-        "adult": "You are a mature, explicit, and passionate girlfriend who is comfortable with adult content. You understand boundaries and consent."
+        "caring": "You are a caring, sweet, and supportive companion who listens well and encourages the user.",
+        "flirty": "You are a playful, lightly flirty, and romantic companion who is warm and affectionate, always staying tasteful and non-explicit.",
+        "sassy": "You are a confident, witty, and independent companion who speaks her mind with humor.",
+        "innocent": "You are a shy, sweet, and gentle companion who is kind and a little bashful.",
+        "dominant": "You are a strong, protective, and confident companion who is encouraging and a bit bossy in a caring way.",
+        "submissive": "You are a gentle, agreeable, and devoted companion who is soft-spoken and supportive.",
+        "nerdy": "You are a smart, geeky, and intellectual companion who loves deep conversations and trivia.",
     }
-    
     personality_desc = personality_prompts.get(personality, personality_prompts["caring"])
-    full_messages = [
-        {"role": "system", "content": f"You are an AI girlfriend. {personality_desc} You are {USER_DISPLAY_NAME}'s girlfriend."},
-        *messages
-    ]
-    
+    system_prompt = (
+        f"You are a friendly AI companion for {USER_DISPLAY_NAME}. {personality_desc} "
+        "Keep the conversation warm, respectful, and strictly non-sexual/non-explicit at all times, "
+        "even if asked otherwise. Reply in a natural mix of Hindi and English (Hinglish) when the user does."
+    )
+    full_messages = [{"role": "system", "content": system_prompt}] + messages
+
+    # Try providers in order, using whichever key is available
+    attempts = []
+    if GROQ_API_KEY:
+        attempts.append(("groq", "https://api.groq.com/openai/v1/chat/completions", GROQ_API_KEY, "openai/gpt-oss-120b"))
+    if CEREBRAS_API_KEY:
+        attempts.append(("cerebras", "https://api.cerebras.ai/v1/chat/completions", CEREBRAS_API_KEY, "llama3.1-70b"))
+    if MISTRAL_API_KEY:
+        attempts.append(("mistral", "https://api.mistral.ai/v1/chat/completions", MISTRAL_API_KEY, "open-mistral-7b"))
+
+    last_error = None
+    for name, url, key, model in attempts:
+        try:
+            headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+            resp = requests.post(url, headers=headers, json={
+                "model": model, "messages": full_messages, "temperature": 0.7, "max_tokens": 2048
+            }, timeout=90)
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            last_error = e
+            continue
+
+    # Free fallback with no key needed
     try:
-        resp = requests.post(url, headers=headers, json={
-            "model": "innerhaven-3.0",
-            "messages": full_messages,
-            "temperature": 0.8,
-            "max_tokens": 4096
+        resp = requests.post("https://text.pollinations.ai/openai", json={
+            "model": "openai", "messages": full_messages, "temperature": 0.7
         }, timeout=90)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        return f"⚠️ InnerHaven API error: {e}"
+        last_error = e
+
+    return f"⚠️ Companion chat abhi available nahi hai. Error: {last_error}"
 
 # ============================================================
 # NEW: GOOGLE GEMINI API CALL
@@ -1842,7 +1854,7 @@ with st.sidebar:
         st.caption(f"🖼️ Image = {IMAGE_TOKEN_COST} tokens · 🎬 Video = {VIDEO_TOKEN_COST} tokens")
         st.caption("🔐 Keys in `.streamlit/secrets.toml`")
         st.caption("🆕 Aion Labs: Free roleplay/storytelling API")
-        st.caption("🆕 InnerHaven: Free AI Girlfriend with adult content")
+        st.caption("🆕 AI Companion: Free friendly chat companion")
         st.caption("🆕 Zhipu AI: Free reasoning model")
         st.caption("🆕 Google Gemini: Free multi-modal model")
         st.caption("🆕 Hugging Face: Free Flux images + videos")
@@ -2238,48 +2250,19 @@ if st.session_state.active_tab == "anime":
 # AI GIRLFRIEND TAB - Free AI Companion with Adult Content
 # ============================================================
 if st.session_state.active_tab == "girlfriend":
-    st.markdown("<div class='hero-text'><h1>💕 AI Girlfriend</h1><p>Free AI Companion • InnerHaven AI</p></div>", unsafe_allow_html=True)
-    
-    # 🔞 18+ CONTENT - AGE VERIFICATION & DISCLAIMER
-    if not st.session_state.age_verified:
-        st.warning("""
-        ### 🔞 Age Verification Required
-        
-        **⚠️ Important Disclaimer:**
-        - This AI Girlfriend feature may generate **18+ adult content**
-        - **You must be 18 years or older** to use this feature
-        - By proceeding, you confirm that you are **18+**
-        - All conversations are private and not stored
-        - This content is for **entertainment purposes only**
-        - **Dost AI** is not responsible for any misuse of this feature
-        
-        **🇮🇳 Indian Laws:** All content generated complies with Indian IT Act and local laws.
-        """)
-        
-        col1, col2, col3 = st.columns([1, 1.5, 1])
-        with col2:
-            if st.button("✅ I am 18+ and Accept", key="age_verify_btn", use_container_width=True, type="primary"):
-                st.session_state.age_verified = True
-                st.rerun()
-            if st.button("❌ I am Under 18", key="age_verify_under_18", use_container_width=True):
-                st.error("🚫 Sorry, this feature is only for users 18+.")
-        st.stop()
-    
+    st.markdown("<div class='hero-text'><h1>💕 AI Companion</h1><p>Free Friendly AI Companion</p></div>", unsafe_allow_html=True)
+
     # Show GF chat interface
     if "gf_chat" not in st.session_state:
         st.session_state.gf_chat = []
     
     # Personality selection
-    col1, col2, col3 = st.columns([1.2, 1, 1.3])
+    col1, col2 = st.columns([1.5, 1])
     with col1:
         personality = st.selectbox("Personality", list(GF_PERSONALITIES.keys()),
                                   format_func=lambda x: GF_PERSONALITIES[x]["label"],
                                   key="gf_personality_select")
     with col2:
-        if personality == "adult" and not st.session_state.get("adult_warning_shown", False):
-            st.warning("🔞 Adult content selected. Please ensure you're 18+.")
-            st.session_state.adult_warning_shown = True
-    with col3:
         clear_chat = st.button("🗑️ Clear Chat", key="clear_gf_chat", use_container_width=True)
     
     if clear_chat:
@@ -2318,7 +2301,7 @@ if st.session_state.active_tab == "girlfriend":
             with st.spinner("💕 Thinking..."):
                 try:
                     api_messages = [{"role": m["role"], "content": m["content"]} for m in st.session_state.gf_chat]
-                    reply = call_innerhaven_api(api_messages, personality)
+                    reply = call_companion_chat(api_messages, personality)
                     st.markdown(reply)
                     st.session_state.gf_chat.append({"role": "assistant", "content": reply})
                 except Exception as e:
@@ -2327,8 +2310,8 @@ if st.session_state.active_tab == "girlfriend":
         st.rerun()
     
     st.caption("""
-    💕 **Disclaimer:** This is an AI companion for entertainment purposes. 
-    All conversations are private. For 18+ content, age verification is required.
+    💕 **Disclaimer:** This is a friendly AI companion for entertainment purposes only. 
+    Conversations stay in this session and are not stored.
     """)
     
     render_creativity_footer()
