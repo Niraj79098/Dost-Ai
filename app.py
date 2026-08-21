@@ -153,7 +153,7 @@ MODEL_TIERS = {
                 "icon": "🎭",
                 "desc": "Storytelling & RP",
                 "provider": "aion",
-                "model_id": "aion-3.0",
+                "model_id": "aion-labs/aion-2.0",
                 "badge": "New",
             },
             "zhipu": {
@@ -1545,6 +1545,8 @@ def call_aion_chat(api_key, model, messages, temp=0.4):
     full = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
     try:
         resp = requests.post(url, headers=headers, json={"model": model, "messages": full, "temperature": temp, "max_tokens": 4096}, timeout=90)
+        if resp.status_code == 401:
+            return "⚠️ Aion API key invalid/expired hai (401 Unauthorized). https://www.aionlabs.ai par login karke dashboard se naya key generate karo aur Streamlit secrets me AION_API_KEY update karo."
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
     except Exception as e:
@@ -2177,7 +2179,7 @@ Make it engaging with characters, dialogue, and vivid descriptions. Genre: {STOR
                 api_messages = [{"role": "user", "content": full_prompt}]
                 try:
                     if AION_API_KEY:
-                        reply = call_aion_chat(AION_API_KEY, "aion-3.0", api_messages, 0.7)
+                        reply = call_aion_chat(AION_API_KEY, "aion-labs/aion-2.0", api_messages, 0.7)
                     else:
                         reply = call_pollinations_chat(api_messages, 0.7)
                     
