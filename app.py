@@ -1966,7 +1966,10 @@ if st.session_state.active_tab == "chat":
 # IMAGE TAB - FIXED: Added Hugging Face back
 # ============================================================
 if st.session_state.active_tab == "image":
-    st.markdown("<div class='hero-text'><h1>AI Image Studio</h1><p>9:16 Ratio • High Quality</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-text'><h1>AI Image Studio</h1><p>Portrait & Landscape • High Quality</p></div>", unsafe_allow_html=True)
+
+    RATIO_LABELS = {"9:16": "📱 Portrait (9:16)", "16:9": "🖥️ Landscape (16:9)"}
+    IMAGE_QTY_MAX = 6
 
     with st.container(key="img_studio_card"):
         img_prompt = st.text_area("Describe your image",
@@ -1975,69 +1978,73 @@ if st.session_state.active_tab == "image":
                                  label_visibility="collapsed",
                                  key="img_prompt_input")
 
-        col1, col2, col3 = st.columns([1.6, 1, 1.3])
+        col1, col2, col3, col4 = st.columns([1.5, 1.3, 0.9, 1.3])
         with col1:
             img_model = st.selectbox("Model", list(IMAGE_MODELS.keys()),
                                     format_func=lambda x: f"{IMAGE_MODELS[x]['icon']} {IMAGE_MODELS[x]['label']}" + (" 🆕" if IMAGE_MODELS[x].get("badge") else ""),
                                     key="img_model_select",
                                     label_visibility="collapsed")
         with col2:
-            img_ratio = st.selectbox("Ratio", ["9:16", "16:9"],
-                                    format_func=lambda x: f"▢ {x} HD",
+            img_ratio = st.selectbox("Orientation", ["9:16", "16:9"],
+                                    format_func=lambda x: RATIO_LABELS[x],
                                     key="img_ratio_select",
                                     label_visibility="collapsed")
         with col3:
+            img_qty = st.selectbox("Kitni images", list(range(1, IMAGE_QTY_MAX + 1)),
+                                    format_func=lambda x: f"{x}x",
+                                    key="img_qty_select",
+                                    label_visibility="collapsed")
+        with col4:
             gen_clicked = st.button("✦ Generate Image", key="gen_image_btn", use_container_width=True)
-        
-        # Show token cost info
-        if img_model in ["pollinations", "huggingface"]:
-            st.caption(f"🆓 Free • No tokens needed • {get_tokens_remaining(USER_EMAIL)} tokens left today")
-        else:
-            st.caption(f"🪙 {IMAGE_TOKEN_COST} tokens/image • {get_tokens_remaining(USER_EMAIL)} left today")
+
+        # Token cost info — every model now costs tokens so free usage stays limited
+        st.caption(f"🪙 {IMAGE_TOKEN_COST} tokens/image • {img_qty}x = {IMAGE_TOKEN_COST * img_qty} tokens • {get_tokens_remaining(USER_EMAIL)} left today")
 
     if gen_clicked:
         if not img_prompt.strip():
             st.warning("Pehle prompt likho.")
         else:
-            # Check tokens only for Agnes (other models are free)
-            if img_model == "agnes" and get_tokens_remaining(USER_EMAIL) < IMAGE_TOKEN_COST:
-                st.error(f"❌ Aaj ke free tokens khatam ho gaye. Image ke liye {IMAGE_TOKEN_COST} tokens chahiye, sirf {get_tokens_remaining(USER_EMAIL)} bache hain. Kal 12 baje ke baad wapas try karo.")
+            total_cost = IMAGE_TOKEN_COST * img_qty
+            if get_tokens_remaining(USER_EMAIL) < total_cost:
+                st.error(f"❌ Aaj ke free tokens khatam ho gaye. {img_qty} image(s) ke liye {total_cost} tokens chahiye, sirf {get_tokens_remaining(USER_EMAIL)} bache hain. Kal 12 baje ke baad wapas try karo.")
             else:
-                if img_model == "pollinations":
-                    img_url = run_with_progress(
-                        lambda: get_image_url_pollinations(img_prompt, img_ratio),
-                        estimate_seconds=8, label="Image ban raha hai")
-                    st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                    st.image(img_url, caption=img_prompt, use_container_width=True)
-                    st.session_state.gallery.insert(0, {"url": img_url, "prompt": img_prompt, "type": "image"})
-                
-                elif img_model == "huggingface":
-                    img_path, err = run_with_progress(
-                        lambda: call_huggingface_image(img_prompt, img_ratio),
-                        estimate_seconds=30, label="Hugging Face Flux se image ban raha hai")
+                st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+                for i in range(img_qty):
+                    progress_label = f"Image {i+1}/{img_qty} ban raha hai" if img_qty > 1 else "Image ban raha hai"
+
+                    if img_model == "pollinations":
+                        img_url = run_with_progress(
+                            lambda: get_image_url_pollinations(img_prompt, img_ratio),
+                            estimate_seconds=8, label=progress_label)
+                        err = None
+                        caption = img_prompt
+                    elif img_model == "huggingface":
+                        img_url, err = run_with_progress(
+                            lambda: call_huggingface_image(img_prompt, img_ratio),
+                            estimate_seconds=30, label=progress_label)
+                        caption = f"🤗 Flux: {img_prompt}"
+                    else:  # agnes
+                        img_url, err = run_with_progress(
+                            lambda: call_agnes_image(img_prompt, img_ratio, AGNES_API_KEY),
+                            estimate_seconds=15, label=progress_label)
+                        caption = img_prompt
+
                     if err:
                         st.error(err)
-                    else:
-                        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                        st.image(img_path, caption=f"🤗 Flux: {img_prompt}", use_container_width=True)
-                        st.session_state.gallery.insert(0, {"url": img_path, "prompt": f"Flux: {img_prompt}", "type": "image"})
-                        # Clean up temp file
+                        break
+
+                    if not deduct_tokens(USER_EMAIL, IMAGE_TOKEN_COST):
+                        st.warning("🪙 Tokens beech mein khatam ho gaye, ruk raha hoon.")
+                        break
+
+                    st.image(img_url, caption=caption, use_container_width=True)
+                    st.session_state.gallery.insert(0, {"url": img_url, "prompt": caption, "type": "image"})
+
+                    if img_model == "huggingface":
                         try:
-                            os.unlink(img_path)
-                        except:
+                            os.unlink(img_url)
+                        except Exception:
                             pass
-                
-                elif img_model == "agnes":
-                    img_url, err = run_with_progress(
-                        lambda: call_agnes_image(img_prompt, img_ratio, AGNES_API_KEY),
-                        estimate_seconds=15, label="Agnes se image ban raha hai")
-                    if err:
-                        st.error(err)
-                    else:
-                        deduct_tokens(USER_EMAIL, IMAGE_TOKEN_COST)
-                        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                        st.image(img_url, caption=img_prompt, use_container_width=True)
-                        st.session_state.gallery.insert(0, {"url": img_url, "prompt": img_prompt, "type": "image"})
 
     render_creativity_footer()
 
@@ -2045,7 +2052,10 @@ if st.session_state.active_tab == "image":
 # VIDEO TAB - FIXED: Added Hugging Face Video
 # ============================================================
 if st.session_state.active_tab == "video":
-    st.markdown("<div class='hero-text'><h1>AI Video Studio</h1><p>Agnes AI • Hugging Face — Free</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-text'><h1>AI Video Studio</h1><p>Agnes AI • Hugging Face</p></div>", unsafe_allow_html=True)
+
+    RATIO_LABELS = {"9:16": "📱 Portrait (9:16)", "16:9": "🖥️ Landscape (16:9)"}
+    VIDEO_QTY_MAX = 4
 
     with st.container(key="vid_studio_card"):
         vid_prompt = st.text_area("Describe your video",
@@ -2054,61 +2064,65 @@ if st.session_state.active_tab == "video":
                                  label_visibility="collapsed",
                                  key="vid_prompt_input")
 
-        col1, col2, col3 = st.columns([1.2, 1, 1.3])
+        col1, col2, col3, col4 = st.columns([1.3, 1.3, 0.9, 1.3])
         with col1:
             vid_model = st.selectbox("Model", list(VIDEO_MODELS.keys()),
                                     format_func=lambda x: f"{VIDEO_MODELS[x]['icon']} {VIDEO_MODELS[x]['label']}" + (" 🆕" if VIDEO_MODELS[x].get("badge") else ""),
                                     key="vid_model_select",
                                     label_visibility="collapsed")
         with col2:
-            vid_ratio = st.selectbox("Ratio", ["9:16", "16:9"],
-                                    format_func=lambda x: f"▢ {x} HD",
+            vid_ratio = st.selectbox("Orientation", ["9:16", "16:9"],
+                                    format_func=lambda x: RATIO_LABELS[x],
                                     key="vid_ratio_select",
                                     label_visibility="collapsed")
         with col3:
+            vid_qty = st.selectbox("Kitne videos", list(range(1, VIDEO_QTY_MAX + 1)),
+                                    format_func=lambda x: f"{x}x",
+                                    key="vid_qty_select",
+                                    label_visibility="collapsed")
+        with col4:
             gen_vid_clicked = st.button("✦ Generate Video", key="gen_video_btn", use_container_width=True)
-        
-        # Show token cost info
-        if vid_model == "huggingface-video":
-            st.caption(f"🆓 Free • No tokens needed • {get_tokens_remaining(USER_EMAIL)} tokens left today")
-        else:
-            st.caption(f"🪙 {VIDEO_TOKEN_COST} tokens/video • {get_tokens_remaining(USER_EMAIL)} left today")
+
+        # Token cost info — every model now costs tokens so free usage stays limited
+        st.caption(f"🪙 {VIDEO_TOKEN_COST} tokens/video • {vid_qty}x = {VIDEO_TOKEN_COST * vid_qty} tokens • {get_tokens_remaining(USER_EMAIL)} left today")
 
     if gen_vid_clicked:
         if not vid_prompt.strip():
             st.warning("Pehle prompt likho.")
         else:
-            # Check tokens only for Agnes
-            if vid_model == "agnes" and get_tokens_remaining(USER_EMAIL) < VIDEO_TOKEN_COST:
-                st.error(f"❌ Aaj ke free tokens khatam ho gaye. Video ke liye {VIDEO_TOKEN_COST} tokens chahiye, sirf {get_tokens_remaining(USER_EMAIL)} bache hain. Kal 12 baje ke baad wapas try karo.")
+            total_cost = VIDEO_TOKEN_COST * vid_qty
+            if get_tokens_remaining(USER_EMAIL) < total_cost:
+                st.error(f"❌ Aaj ke free tokens khatam ho gaye. {vid_qty} video(s) ke liye {total_cost} tokens chahiye, sirf {get_tokens_remaining(USER_EMAIL)} bache hain. Kal 12 baje ke baad wapas try karo.")
             else:
-                if vid_model == "huggingface-video":
-                    vid_path, err = run_with_progress(
-                        lambda: call_huggingface_video(vid_prompt, vid_ratio),
-                        estimate_seconds=120, label="Hugging Face se video ban raha hai")
+                st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+                for i in range(vid_qty):
+                    progress_label = f"Video {i+1}/{vid_qty} ban raha hai" if vid_qty > 1 else "Video ban raha hai"
+
+                    if vid_model == "huggingface-video":
+                        vid_url, err = run_with_progress(
+                            lambda: call_huggingface_video(vid_prompt, vid_ratio),
+                            estimate_seconds=120, label=progress_label)
+                    else:  # agnes
+                        vid_url, err = run_with_progress(
+                            lambda: call_agnes_video(vid_prompt, vid_ratio, AGNES_API_KEY),
+                            estimate_seconds=55, label=progress_label)
+
                     if err:
                         st.error(err)
-                    else:
-                        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                        st.video(vid_path)
-                        st.caption(f"🤗 Video: {vid_prompt}")
-                        # Clean up temp file
+                        break
+
+                    if not deduct_tokens(USER_EMAIL, VIDEO_TOKEN_COST):
+                        st.warning("🪙 Tokens beech mein khatam ho gaye, ruk raha hoon.")
+                        break
+
+                    st.video(vid_url)
+                    st.caption(f"🎬 {vid_prompt}")
+
+                    if vid_model == "huggingface-video":
                         try:
-                            os.unlink(vid_path)
-                        except:
+                            os.unlink(vid_url)
+                        except Exception:
                             pass
-                
-                elif vid_model == "agnes":
-                    vid_url, err = run_with_progress(
-                        lambda: call_agnes_video(vid_prompt, vid_ratio, AGNES_API_KEY),
-                        estimate_seconds=55, label="Agnes se video ban raha hai")
-                    if err:
-                        st.error(err)
-                    else:
-                        deduct_tokens(USER_EMAIL, VIDEO_TOKEN_COST)
-                        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                        st.video(vid_url)
-                        st.caption(f"🎬 {vid_prompt}")
 
     render_creativity_footer()
 
