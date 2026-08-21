@@ -1,6 +1,6 @@
 """
-🧡 Dost AI — COMPLETE FREE AI STUDIO
-All Free AI Tools: Chat, Image, Video, Music, Story, Anime, AI Girlfriend, Uncensored Chat
+🧡 Dost AI — COMPLETE FREE AI STUDIO (FIXED VERSION)
+All Free AI Tools: Chat, Image, Video, Music, Story, Anime, AI Girlfriend
 """
 
 import streamlit as st
@@ -47,11 +47,11 @@ MISTRAL_API_KEY = get_secret("MISTRAL_API_KEY")
 AGNES_API_KEY = get_secret("AGNES_API_KEY")
 MINIMAX_API_KEY = get_secret("MINIMAX_API_KEY")
 MUSICAPI_KEY = get_secret("MUSICAPI_KEY")
+HUGGINGFACE_TOKEN = get_secret("HUGGINGFACE_TOKEN")  # NEW: For Flux model
 
 # New Free Models
 AION_API_KEY = get_secret("AION_API_KEY")
 INNERHAVEN_API_KEY = get_secret("INNERHAVEN_API_KEY")
-WESHOP_API_KEY = get_secret("WESHOP_API_KEY")
 GOOGLE_API_KEY = get_secret("GOOGLE_API_KEY")
 ZHIPU_API_KEY = get_secret("ZHIPU_API_KEY")
 
@@ -207,18 +207,20 @@ MODEL_TIERS = {
 DEFAULT_CHAT_MODEL = "groq-standard"
 
 # ============================================================
-# IMAGE MODELS - EXTENDED
+# IMAGE MODELS - FIXED: Added Hugging Face back
 # ============================================================
 IMAGE_MODELS = {
     "pollinations": {"label": "Pollinations AI", "icon": "🖼️", "desc": "Bilkul free, no key"},
     "agnes": {"label": "Agnes AI", "icon": "🤖", "desc": "Free, high quality"},
+    "huggingface": {"label": "Hugging Face (Flux)", "icon": "🤗", "desc": "Free with HF token", "badge": "New"},
 }
 
 # ============================================================
-# VIDEO MODELS
+# VIDEO MODELS - EXTENDED with more free options
 # ============================================================
 VIDEO_MODELS = {
     "agnes": {"label": "Agnes AI", "icon": "🤖", "desc": "Free video gen"},
+    "huggingface-video": {"label": "Hugging Face Video", "icon": "🤗", "desc": "Free with HF token", "badge": "New"},
 }
 
 # ============================================================
@@ -1053,7 +1055,7 @@ if "selected_music_model" not in st.session_state:
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "chat"
 
-# NEW: Story and Anime session state
+# NEW: Story, Anime, Girlfriend session state
 if "selected_story_genre" not in st.session_state:
     st.session_state.selected_story_genre = "fantasy"
 if "selected_anime_style" not in st.session_state:
@@ -1088,6 +1090,96 @@ def get_model_info(model_id):
     return MODEL_TIERS["free"]["models"][DEFAULT_CHAT_MODEL]
 
 # ============================================================
+# NEW: HUGGING FACE IMAGE GENERATION (Flux)
+# ============================================================
+def call_huggingface_image(prompt, ratio="9:16"):
+    """Hugging Face - Free image generation with Flux model"""
+    if not HUGGINGFACE_TOKEN:
+        return None, "⚠️ HUGGINGFACE_TOKEN set nahi hai. https://huggingface.co/settings/tokens se free token lo."
+    
+    width, height = (768, 1365) if ratio == "9:16" else (1365, 768)
+    headers = {"Authorization": f"Bearer {HUGGINGFACE_TOKEN}"}
+    
+    # Using Black Forest Labs Flux model via HF Inference API
+    API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
+    
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "width": width,
+            "height": height,
+            "num_inference_steps": 28,
+            "guidance_scale": 3.5,
+        }
+    }
+    
+    try:
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=180)
+        response.raise_for_status()
+        
+        # Check if response is an image
+        content_type = response.headers.get('content-type', '')
+        if 'image' in content_type:
+            # Save image to a temp file and return path
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
+                tmp_file.write(response.content)
+                return tmp_file.name, None
+        else:
+            # Might be an error message or queued
+            error_data = response.json()
+            if 'error' in error_data:
+                return None, f"Error: {error_data['error']}"
+            return None, f"Error: Unexpected response from Hugging Face. Response: {error_data}"
+            
+    except requests.exceptions.RequestException as e:
+        return None, f"Error: Hugging Face API error - {str(e)}"
+    except Exception as e:
+        return None, f"Error: {str(e)}"
+
+# ============================================================
+# NEW: HUGGING FACE VIDEO GENERATION
+# ============================================================
+def call_huggingface_video(prompt, ratio="9:16"):
+    """Hugging Face - Free video generation with diffusion models"""
+    if not HUGGINGFACE_TOKEN:
+        return None, "⚠️ HUGGINGFACE_TOKEN set nahi hai. https://huggingface.co/settings/tokens se free token lo."
+    
+    headers = {"Authorization": f"Bearer {HUGGINGFACE_TOKEN}"}
+    
+    # Using a text-to-video model on Hugging Face
+    API_URL = "https://api-inference.huggingface.co/models/ali-vilab/text-to-video-ms-1.7b"
+    
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "num_frames": 30,
+            "fps": 8,
+        }
+    }
+    
+    try:
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=300)
+        response.raise_for_status()
+        
+        content_type = response.headers.get('content-type', '')
+        if 'video' in content_type or 'mp4' in content_type:
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                tmp_file.write(response.content)
+                return tmp_file.name, None
+        else:
+            error_data = response.json()
+            if 'error' in error_data:
+                return None, f"Error: {error_data['error']}"
+            return None, f"Error: Unexpected response. Response: {error_data}"
+            
+    except requests.exceptions.RequestException as e:
+        return None, f"Error: Hugging Face API error - {str(e)}"
+    except Exception as e:
+        return None, f"Error: {str(e)}"
+
+# ============================================================
 # NEW: ZHIPU AI API CALL
 # ============================================================
 def call_zhipu_chat(api_key, model, messages, temp=0.4):
@@ -1115,7 +1207,6 @@ def call_innerhaven_api(messages, personality="caring"):
     url = "https://api.innerhaven.ai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {INNERHAVEN_API_KEY}", "Content-Type": "application/json"}
     
-    # Personality-based system prompt
     personality_prompts = {
         "caring": "You are a caring, sweet, and loving girlfriend who is always supportive and understanding.",
         "flirty": "You are a playful, flirty, and romantic girlfriend who loves to tease and be affectionate.",
@@ -1153,13 +1244,11 @@ def call_gemini_chat(api_key, messages, temp=0.4):
     if not api_key:
         return "⚠️ GOOGLE_API_KEY set nahi hai. https://aistudio.google.com/app/apikey se free key lo."
     
-    # Convert messages to Gemini format
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash-exp')
         
-        # Build conversation history
         history = []
         for msg in messages:
             if msg["role"] == "user":
@@ -1167,7 +1256,6 @@ def call_gemini_chat(api_key, messages, temp=0.4):
             elif msg["role"] == "assistant":
                 history.append({"role": "model", "parts": [msg["content"]]})
         
-        # Start chat with history
         chat = model.start_chat(history=history)
         response = chat.send_message(messages[-1]["content"])
         return response.text
@@ -1724,6 +1812,7 @@ with st.sidebar:
         st.caption("🆕 InnerHaven: Free AI Girlfriend with adult content")
         st.caption("🆕 Zhipu AI: Free reasoning model")
         st.caption("🆕 Google Gemini: Free multi-modal model")
+        st.caption("🆕 Hugging Face: Free Flux images + videos")
 
     st.progress(min(1.0, _tokens_left / TOKEN_LIMIT_PER_DAY), text=f"🪙 {_tokens_left}/{TOKEN_LIMIT_PER_DAY} tokens left today")
 
@@ -1829,7 +1918,7 @@ if st.session_state.active_tab == "chat":
     render_creativity_footer()
 
 # ============================================================
-# IMAGE TAB (UNCHANGED)
+# IMAGE TAB - FIXED: Added Hugging Face back
 # ============================================================
 if st.session_state.active_tab == "image":
     st.markdown("<div class='hero-text'><h1>AI Image Studio</h1><p>9:16 Ratio • High Quality</p></div>", unsafe_allow_html=True)
@@ -1844,7 +1933,7 @@ if st.session_state.active_tab == "image":
         col1, col2, col3 = st.columns([1.6, 1, 1.3])
         with col1:
             img_model = st.selectbox("Model", list(IMAGE_MODELS.keys()),
-                                    format_func=lambda x: IMAGE_MODELS[x]["label"],
+                                    format_func=lambda x: f"{IMAGE_MODELS[x]['icon']} {IMAGE_MODELS[x]['label']}" + (" 🆕" if IMAGE_MODELS[x].get("badge") else ""),
                                     key="img_model_select",
                                     label_visibility="collapsed")
         with col2:
@@ -1854,41 +1943,64 @@ if st.session_state.active_tab == "image":
                                     label_visibility="collapsed")
         with col3:
             gen_clicked = st.button("✦ Generate Image", key="gen_image_btn", use_container_width=True)
-        st.caption(f"🪙 {IMAGE_TOKEN_COST} tokens/image · {get_tokens_remaining(USER_EMAIL)} left today")
+        
+        # Show token cost info
+        if img_model in ["pollinations", "huggingface"]:
+            st.caption(f"🆓 Free • No tokens needed • {get_tokens_remaining(USER_EMAIL)} tokens left today")
+        else:
+            st.caption(f"🪙 {IMAGE_TOKEN_COST} tokens/image • {get_tokens_remaining(USER_EMAIL)} left today")
 
     if gen_clicked:
         if not img_prompt.strip():
             st.warning("Pehle prompt likho.")
-        elif get_tokens_remaining(USER_EMAIL) < IMAGE_TOKEN_COST:
-            st.error(f"❌ Aaj ke free tokens khatam ho gaye. Image ke liye {IMAGE_TOKEN_COST} tokens chahiye, sirf {get_tokens_remaining(USER_EMAIL)} bache hain. Kal 12 baje ke baad wapas try karo.")
         else:
-            if img_model == "pollinations":
-                img_url = run_with_progress(
-                    lambda: get_image_url_pollinations(img_prompt, img_ratio),
-                    estimate_seconds=8, label="Image ban raha hai")
-                deduct_tokens(USER_EMAIL, IMAGE_TOKEN_COST)
-                st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                st.image(img_url, caption=img_prompt, use_container_width=True)
-                st.session_state.gallery.insert(0, {"url": img_url, "prompt": img_prompt, "type": "image"})
-            elif img_model == "agnes":
-                img_url, err = run_with_progress(
-                    lambda: call_agnes_image(img_prompt, img_ratio, AGNES_API_KEY),
-                    estimate_seconds=15, label="Image ban raha hai")
-                if err:
-                    st.error(err)
-                else:
-                    deduct_tokens(USER_EMAIL, IMAGE_TOKEN_COST)
+            # Check tokens only for Agnes (other models are free)
+            if img_model == "agnes" and get_tokens_remaining(USER_EMAIL) < IMAGE_TOKEN_COST:
+                st.error(f"❌ Aaj ke free tokens khatam ho gaye. Image ke liye {IMAGE_TOKEN_COST} tokens chahiye, sirf {get_tokens_remaining(USER_EMAIL)} bache hain. Kal 12 baje ke baad wapas try karo.")
+            else:
+                if img_model == "pollinations":
+                    img_url = run_with_progress(
+                        lambda: get_image_url_pollinations(img_prompt, img_ratio),
+                        estimate_seconds=8, label="Image ban raha hai")
                     st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
                     st.image(img_url, caption=img_prompt, use_container_width=True)
                     st.session_state.gallery.insert(0, {"url": img_url, "prompt": img_prompt, "type": "image"})
+                
+                elif img_model == "huggingface":
+                    img_path, err = run_with_progress(
+                        lambda: call_huggingface_image(img_prompt, img_ratio),
+                        estimate_seconds=30, label="Hugging Face Flux se image ban raha hai")
+                    if err:
+                        st.error(err)
+                    else:
+                        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
+                        st.image(img_path, caption=f"🤗 Flux: {img_prompt}", use_container_width=True)
+                        st.session_state.gallery.insert(0, {"url": img_path, "prompt": f"Flux: {img_prompt}", "type": "image"})
+                        # Clean up temp file
+                        try:
+                            os.unlink(img_path)
+                        except:
+                            pass
+                
+                elif img_model == "agnes":
+                    img_url, err = run_with_progress(
+                        lambda: call_agnes_image(img_prompt, img_ratio, AGNES_API_KEY),
+                        estimate_seconds=15, label="Agnes se image ban raha hai")
+                    if err:
+                        st.error(err)
+                    else:
+                        deduct_tokens(USER_EMAIL, IMAGE_TOKEN_COST)
+                        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
+                        st.image(img_url, caption=img_prompt, use_container_width=True)
+                        st.session_state.gallery.insert(0, {"url": img_url, "prompt": img_prompt, "type": "image"})
 
     render_creativity_footer()
 
 # ============================================================
-# VIDEO TAB (UNCHANGED)
+# VIDEO TAB - FIXED: Added Hugging Face Video
 # ============================================================
 if st.session_state.active_tab == "video":
-    st.markdown("<div class='hero-text'><h1>AI Video Studio</h1><p>Agnes AI — Free</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-text'><h1>AI Video Studio</h1><p>Agnes AI • Hugging Face — Free</p></div>", unsafe_allow_html=True)
 
     with st.container(key="vid_studio_card"):
         vid_prompt = st.text_area("Describe your video",
@@ -1897,32 +2009,61 @@ if st.session_state.active_tab == "video":
                                  label_visibility="collapsed",
                                  key="vid_prompt_input")
 
-        col1, col2 = st.columns([1, 1.3])
+        col1, col2, col3 = st.columns([1.2, 1, 1.3])
         with col1:
+            vid_model = st.selectbox("Model", list(VIDEO_MODELS.keys()),
+                                    format_func=lambda x: f"{VIDEO_MODELS[x]['icon']} {VIDEO_MODELS[x]['label']}" + (" 🆕" if VIDEO_MODELS[x].get("badge") else ""),
+                                    key="vid_model_select",
+                                    label_visibility="collapsed")
+        with col2:
             vid_ratio = st.selectbox("Ratio", ["9:16", "16:9"],
                                     format_func=lambda x: f"▢ {x} HD",
                                     key="vid_ratio_select",
                                     label_visibility="collapsed")
-        with col2:
+        with col3:
             gen_vid_clicked = st.button("✦ Generate Video", key="gen_video_btn", use_container_width=True)
-        st.caption(f"🪙 {VIDEO_TOKEN_COST} tokens/video · {get_tokens_remaining(USER_EMAIL)} left today")
+        
+        # Show token cost info
+        if vid_model == "huggingface-video":
+            st.caption(f"🆓 Free • No tokens needed • {get_tokens_remaining(USER_EMAIL)} tokens left today")
+        else:
+            st.caption(f"🪙 {VIDEO_TOKEN_COST} tokens/video • {get_tokens_remaining(USER_EMAIL)} left today")
 
     if gen_vid_clicked:
         if not vid_prompt.strip():
             st.warning("Pehle prompt likho.")
-        elif get_tokens_remaining(USER_EMAIL) < VIDEO_TOKEN_COST:
-            st.error(f"❌ Aaj ke free tokens khatam ho gaye. Video ke liye {VIDEO_TOKEN_COST} tokens chahiye, sirf {get_tokens_remaining(USER_EMAIL)} bache hain. Kal 12 baje ke baad wapas try karo.")
         else:
-            vid_url, err = run_with_progress(
-                lambda: call_agnes_video(vid_prompt, vid_ratio, AGNES_API_KEY),
-                estimate_seconds=55, label="Video ban raha hai")
-            if err:
-                st.error(err)
+            # Check tokens only for Agnes
+            if vid_model == "agnes" and get_tokens_remaining(USER_EMAIL) < VIDEO_TOKEN_COST:
+                st.error(f"❌ Aaj ke free tokens khatam ho gaye. Video ke liye {VIDEO_TOKEN_COST} tokens chahiye, sirf {get_tokens_remaining(USER_EMAIL)} bache hain. Kal 12 baje ke baad wapas try karo.")
             else:
-                deduct_tokens(USER_EMAIL, VIDEO_TOKEN_COST)
-                st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-                st.video(vid_url)
-                st.caption(f"🎬 {vid_prompt}")
+                if vid_model == "huggingface-video":
+                    vid_path, err = run_with_progress(
+                        lambda: call_huggingface_video(vid_prompt, vid_ratio),
+                        estimate_seconds=120, label="Hugging Face se video ban raha hai")
+                    if err:
+                        st.error(err)
+                    else:
+                        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
+                        st.video(vid_path)
+                        st.caption(f"🤗 Video: {vid_prompt}")
+                        # Clean up temp file
+                        try:
+                            os.unlink(vid_path)
+                        except:
+                            pass
+                
+                elif vid_model == "agnes":
+                    vid_url, err = run_with_progress(
+                        lambda: call_agnes_video(vid_prompt, vid_ratio, AGNES_API_KEY),
+                        estimate_seconds=55, label="Agnes se video ban raha hai")
+                    if err:
+                        st.error(err)
+                    else:
+                        deduct_tokens(USER_EMAIL, VIDEO_TOKEN_COST)
+                        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
+                        st.video(vid_url)
+                        st.caption(f"🎬 {vid_prompt}")
 
     render_creativity_footer()
 
@@ -2007,7 +2148,6 @@ Make it engaging with characters, dialogue, and vivid descriptions. Genre: {STOR
                     if AION_API_KEY:
                         reply = call_aion_chat(AION_API_KEY, "aion-3.0", api_messages, 0.7)
                     else:
-                        # Fallback to Pollinations if Aion key not set
                         reply = call_pollinations_chat(api_messages, 0.7)
                     
                     st.markdown("---")
@@ -2067,9 +2207,7 @@ if st.session_state.active_tab == "anime":
 if st.session_state.active_tab == "girlfriend":
     st.markdown("<div class='hero-text'><h1>💕 AI Girlfriend</h1><p>Free AI Companion • InnerHaven AI</p></div>", unsafe_allow_html=True)
     
-    # ============================================================
     # 🔞 18+ CONTENT - AGE VERIFICATION & DISCLAIMER
-    # ============================================================
     if not st.session_state.age_verified:
         st.warning("""
         ### 🔞 Age Verification Required
@@ -2105,7 +2243,6 @@ if st.session_state.active_tab == "girlfriend":
                                   format_func=lambda x: GF_PERSONALITIES[x]["label"],
                                   key="gf_personality_select")
     with col2:
-        # Show adult warning if selected
         if personality == "adult" and not st.session_state.get("adult_warning_shown", False):
             st.warning("🔞 Adult content selected. Please ensure you're 18+.")
             st.session_state.adult_warning_shown = True
@@ -2156,7 +2293,6 @@ if st.session_state.active_tab == "girlfriend":
         
         st.rerun()
     
-    # Show disclaimer footer
     st.caption("""
     💕 **Disclaimer:** This is an AI companion for entertainment purposes. 
     All conversations are private. For 18+ content, age verification is required.
