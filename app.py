@@ -18,6 +18,14 @@ import random
 import streamlit.components.v1 as components
 import json
 import httpx
+import tempfile
+
+try:
+    from huggingface_hub import InferenceClient
+    from huggingface_hub.errors import HfHubHTTPError
+    HF_HUB_AVAILABLE = True
+except ImportError:
+    HF_HUB_AVAILABLE = False
 
 # ============================================================
 # 🔐 SECURE SECRETS - IMPROVED
@@ -1090,94 +1098,99 @@ def get_model_info(model_id):
     return MODEL_TIERS["free"]["models"][DEFAULT_CHAT_MODEL]
 
 # ============================================================
-# NEW: HUGGING FACE IMAGE GENERATION (Flux)
+# NEW: HUGGING FACE IMAGE GENERATION (Flux / SD via Inference Providers)
 # ============================================================
+# IMPORTANT: HF ne purana "api-inference.huggingface.co" endpoint band
+# (HTTP 410) kar diya hai. Ab sab kuch "Inference Providers" ke through
+# "router.huggingface.co" se hota hai. Isliye huggingface_hub client use
+# kar rahe hai jo naya routing khud handle karta hai.
+IMAGE_MODEL_FALLBACKS = [
+    "black-forest-labs/FLUX.1-schnell",
+    "stabilityai/stable-diffusion-3-medium-diffusers",
+    "stabilityai/stable-diffusion-xl-base-1.0",
+]
+
 def call_huggingface_image(prompt, ratio="9:16"):
-    """Hugging Face - Free image generation with Flux model"""
+    """Hugging Face - Free image generation via HF Inference Providers (router.huggingface.co)"""
     if not HUGGINGFACE_TOKEN:
-        return None, "⚠️ HUGGINGFACE_TOKEN set nahi hai. https://huggingface.co/settings/tokens se free token lo."
-    
+        return None, "⚠️ HUGGINGFACE_TOKEN set nahi hai. https://huggingface.co/settings/tokens se free token lo (naya token banate waqt 'Inference Providers' permission zaroor tick karo)."
+
+    if not HF_HUB_AVAILABLE:
+        return None, "⚠️ 'huggingface_hub' package install nahi hai. requirements.txt me 'huggingface_hub>=0.28.0' add karo aur redeploy karo."
+
     width, height = (768, 1365) if ratio == "9:16" else (1365, 768)
-    headers = {"Authorization": f"Bearer {HUGGINGFACE_TOKEN}"}
-    
-    # Using Black Forest Labs Flux model via HF Inference API
-    API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
-    
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "width": width,
-            "height": height,
-            "num_inference_steps": 28,
-            "guidance_scale": 3.5,
-        }
-    }
-    
-    try:
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=180)
-        response.raise_for_status()
-        
-        # Check if response is an image
-        content_type = response.headers.get('content-type', '')
-        if 'image' in content_type:
-            # Save image to a temp file and return path
-            import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
-                tmp_file.write(response.content)
-                return tmp_file.name, None
-        else:
-            # Might be an error message or queued
-            error_data = response.json()
-            if 'error' in error_data:
-                return None, f"Error: {error_data['error']}"
-            return None, f"Error: Unexpected response from Hugging Face. Response: {error_data}"
-            
-    except requests.exceptions.RequestException as e:
-        return None, f"Error: Hugging Face API error - {str(e)}"
-    except Exception as e:
-        return None, f"Error: {str(e)}"
+    client = InferenceClient(provider="hf-inference", api_key=HUGGINGFACE_TOKEN)
+
+    last_error = None
+    for model in IMAGE_MODEL_FALLBACKS:
+        for attempt in range(2):  # ek retry, model "cold start" ho sakta hai
+            try:
+                image = client.text_to_image(
+                    prompt,
+                    model=model,
+                    width=width,
+                    height=height,
+                    num_inference_steps=28,
+                    guidance_scale=3.5,
+                )
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
+                    image.save(tmp_file.name)
+                    return tmp_file.name, None
+            except HfHubHTTPError as e:
+                last_error = str(e)
+                status = getattr(e.response, "status_code", None) if hasattr(e, "response") else None
+                if status == 503:  # model load ho raha hai, thoda ruk kar retry
+                    time.sleep(15)
+                    continue
+                break  # doosri error ho to agla model try karo
+            except Exception as e:
+                last_error = str(e)
+                break
+
+    return None, f"⚠️ Hugging Face image generation abhi fail ho raha hai. Detail: {last_error}"
 
 # ============================================================
 # NEW: HUGGING FACE VIDEO GENERATION
 # ============================================================
+# NOTE: HF ka purana free text-to-video (ali-vilab model, api-inference.huggingface.co)
+# ab exist hi nahi karta. Naye "Inference Providers" system me text-to-video sirf
+# third-party providers (fal-ai, Replicate, etc.) ke through milta hai, jinke liye
+# aksar apne HF account me billing/provider connect karna padta hai:
+# https://huggingface.co/settings/inference-providers
+VIDEO_MODEL_FALLBACKS = [
+    "Wan-AI/Wan2.2-TI2V-5B",
+    "Lightricks/LTX-Video-0.9.8-13B-distilled",
+    "tencent/HunyuanVideo",
+]
+
 def call_huggingface_video(prompt, ratio="9:16"):
-    """Hugging Face - Free video generation with diffusion models"""
+    """Hugging Face - Video generation via HF Inference Providers (needs a connected provider)"""
     if not HUGGINGFACE_TOKEN:
         return None, "⚠️ HUGGINGFACE_TOKEN set nahi hai. https://huggingface.co/settings/tokens se free token lo."
-    
-    headers = {"Authorization": f"Bearer {HUGGINGFACE_TOKEN}"}
-    
-    # Using a text-to-video model on Hugging Face
-    API_URL = "https://api-inference.huggingface.co/models/ali-vilab/text-to-video-ms-1.7b"
-    
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "num_frames": 30,
-            "fps": 8,
-        }
-    }
-    
-    try:
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=300)
-        response.raise_for_status()
-        
-        content_type = response.headers.get('content-type', '')
-        if 'video' in content_type or 'mp4' in content_type:
-            import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
-                tmp_file.write(response.content)
+
+    if not HF_HUB_AVAILABLE:
+        return None, "⚠️ 'huggingface_hub' package install nahi hai. requirements.txt me 'huggingface_hub>=0.28.0' add karo aur redeploy karo."
+
+    client = InferenceClient(provider="auto", api_key=HUGGINGFACE_TOKEN)
+
+    last_error = None
+    for model in VIDEO_MODEL_FALLBACKS:
+        try:
+            video_bytes = client.text_to_video(prompt, model=model)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
+                tmp_file.write(video_bytes)
                 return tmp_file.name, None
-        else:
-            error_data = response.json()
-            if 'error' in error_data:
-                return None, f"Error: {error_data['error']}"
-            return None, f"Error: Unexpected response. Response: {error_data}"
-            
-    except requests.exceptions.RequestException as e:
-        return None, f"Error: Hugging Face API error - {str(e)}"
-    except Exception as e:
-        return None, f"Error: {str(e)}"
+        except Exception as e:
+            last_error = str(e)
+            continue
+
+    return None, (
+        "⚠️ Hugging Face par ab free text-to-video available nahi hai — HF ne purana "
+        "free video API band kar diya hai. Video generation ab sirf paid providers "
+        "(fal-ai, Replicate, etc.) se milta hai, jisko https://huggingface.co/settings/inference-providers "
+        "par jaake connect/billing enable karna padta hai. "
+        f"Detail: {last_error}"
+    )
 
 # ============================================================
 # NEW: ZHIPU AI API CALL
